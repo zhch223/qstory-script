@@ -1,0 +1,18 @@
+# 编译产物
+*.class
+*.jar
+
+# 日志文件
+debug.log
+
+# 配置文件
+*.prop
+
+# IDE相关
+.idea/
+.vscode/
+*.iml
+
+# 系统文件
+Thumbs.db
+.DS_Store
