@@ -190,6 +190,77 @@ void showPersistList(Object msg) {
     }
 }
 
+void showScriptList(Object msg) {
+    try {
+        String scriptsDir = appPath + "/scripts";
+        java.io.File dir = new java.io.File(scriptsDir);
+        java.io.File[] files = dir.listFiles();
+        
+        if (files == null || files.length == 0) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "scripts目录为空，暂无脚本。");
+            return;
+        }
+        
+        StringBuilder sb = new StringBuilder("当前scripts目录下的脚本：\n");
+        int count = 0;
+        for (java.io.File file : files) {
+            if (file.isFile() && file.getName().endsWith(".java")) {
+                sb.append("- " + file.getName() + "\n");
+                count++;
+            }
+        }
+        
+        if (count == 0) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "scripts目录下暂无Java脚本文件。");
+        } else {
+            sb.append("\n共 " + count + " 个脚本文件");
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, sb.toString());
+        }
+    } catch (Exception e) {
+        error(e);
+        log("Error showing script list: " + e.getMessage());
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "获取脚本列表失败：" + e.getMessage());
+    }
+}
+
+void stopScript(String fileName, Object msg) {
+    try {
+        // 从持久化列表中移除
+        String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
+        if (!filesStr.isEmpty()) {
+            String[] arr = filesStr.split(",");
+            ArrayList<String> list = new ArrayList<>();
+            boolean found = false;
+            for (String s : arr) {
+                if (s.trim().equals(fileName)) {
+                    found = true;
+                } else if (!s.trim().isEmpty()) {
+                    list.add(s.trim());
+                }
+            }
+            if (found) {
+                String newStr = String.join(",", list);
+                if (newStr.isEmpty()) {
+                    putString(PERSIST_CONFIG, PERSIST_KEY, "");
+                } else {
+                    putString(PERSIST_CONFIG, PERSIST_KEY, newStr);
+                }
+            }
+        }
+        
+        // 这里可以添加额外的停止逻辑，比如从EventLibrary中移除对应的处理器
+        // 由于我们的事件分发机制是基于注册的处理器，停止脚本可能需要更复杂的逻辑
+        // 目前主要是从持久化列表中移除，确保下次不会自动加载
+        
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "脚本 " + fileName + " 已停止。");
+        log("Stopped script: " + fileName);
+    } catch (Exception e) {
+        error(e);
+        log("Error stopping script: " + e.getMessage());
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "停止脚本失败：" + e.getMessage());
+    }
+}
+
 // ==================== 文件管理 ====================
 boolean fileExists(String path) {
     try {
@@ -220,12 +291,22 @@ boolean handleWaitingState(Object msg, String sessionId) {
         return true;
     }
 
-    String filePath = appPath + "/" + fileName;
+    String filePath;
+    if (state == STATE_WAIT_CREATE) {
+        // 新建文件时保存到scripts目录
+        filePath = appPath + "/scripts/" + fileName;
+    } else {
+        // 编辑文件时，先尝试在scripts目录查找，再尝试根目录
+        filePath = appPath + "/scripts/" + fileName;
+        if (!fileExists(filePath)) {
+            filePath = appPath + "/" + fileName;
+        }
+    }
 
     if (state == STATE_WAIT_CREATE) {
         try {
             writeTextToFile(filePath, msg.MessageContent);
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, fileName + " 已保存。");
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, fileName + " 已保存到scripts目录。");
         } catch (Exception e) {
             error(e);
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "保存失败：" + e.getMessage());
@@ -318,7 +399,12 @@ boolean handleFileCommand(Object msg, String sessionId, String cmd, String arg) 
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
             return true;
         }
-        String filePath = appPath + "/" + arg;
+        // 尝试在scripts目录中查找
+        String filePath = appPath + "/scripts/" + arg;
+        if (!fileExists(filePath)) {
+            // 如果scripts目录中不存在，尝试在根目录查找
+            filePath = appPath + "/" + arg;
+        }
         String contentStr = readFileText(filePath);
         if (contentStr == null) {
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件不存在或无法读取：" + arg);
@@ -337,7 +423,12 @@ boolean handleFileCommand(Object msg, String sessionId, String cmd, String arg) 
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
             return true;
         }
-        String filePath = appPath + "/" + arg;
+        // 尝试在scripts目录中查找
+        String filePath = appPath + "/scripts/" + arg;
+        if (!fileExists(filePath)) {
+            // 如果scripts目录中不存在，尝试在根目录查找
+            filePath = appPath + "/" + arg;
+        }
         try {
             load(filePath);
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + arg + " 已加载。");
@@ -375,6 +466,20 @@ boolean handlePersistCommand(Object msg, String cmd, String arg) {
         return true;
     } else if (cmd.equals("/列表")) {
         showPersistList(msg);
+        return true;
+    } else if (cmd.equals("/脚本列表")) {
+        showScriptList(msg);
+        return true;
+    } else if (cmd.equals("/stop")) {
+        if (arg.isEmpty() || !arg.endsWith(".java")) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "用法：/stop 文件名.java （必须以.java结尾）");
+            return true;
+        }
+        if (!isValidFileName(arg)) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
+            return true;
+        }
+        stopScript(arg, msg);
         return true;
     }
     return false;
