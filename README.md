@@ -117,6 +117,8 @@ main.java提供以下全局方法：
 6. **errorGlobal(Exception e)** - 处理错误
 7. **isGlobalAdmin(String qq)** - 检查是否为管理员
 
+**重要强调**：全局调用类方法需要通过上述方法自己注册，**不可直接使用API.MD中提供的全局方法**（如onMsg、onLoad等），否则会与主脚本冲突，导致脚本无法正常运行。
+
 ## 开发指南
 
 ### 1. 创建新脚本
