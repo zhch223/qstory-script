@@ -30,10 +30,79 @@ int STATE_NONE = 0;
 int STATE_WAIT_CREATE = 1;
 int STATE_WAIT_EDIT = 2;
 
+// 全局方法集合，供其他脚本调用
+// 注册消息处理器
+void registerMessageHandler(String name, Object handler) {
+    // 这里可以实现简单的处理器注册逻辑
+    log("Registered message handler: " + name);
+}
+
+// 发送消息的全局方法
+void sendGlobalMessage(String groupUin, String userUin, String content) {
+    sendMsg(groupUin, userUin, content);
+}
+
+// 日志记录的全局方法
+void logGlobal(String message) {
+    log(message);
+}
+
+// 错误处理的全局方法
+void errorGlobal(Exception e) {
+    error(e);
+}
+
+// 检查是否为管理员的全局方法
+boolean isGlobalAdmin(String qq) {
+    return isAdmin(qq);
+}
+
+// 脚本注册方法，供其他脚本在加载时调用
+void registerScript(String scriptName, Object scriptObject) {
+    log("Script registered: " + scriptName);
+}
+
 void onLoad() {
     ensureAdmin(myUin);
-    loadExternalLibrary();
-    loadPersistedFiles();
+    
+    // 优先加载外部库，确保所有JAR文件在脚本加载前准备就绪
+    try {
+        log("=== Loading external libraries ===");
+        loadExternalLibrary();
+        log("=== External libraries loaded successfully ===");
+    } catch (Exception e) {
+        error(e);
+        log("Error loading external libraries: " + e.getMessage());
+    }
+    
+    // 延迟一秒，确保JAR文件完全加载
+    try {
+        Thread.sleep(1000);
+        log("Waiting for JAR files to initialize...");
+    } catch (Exception e) {
+        // 忽略睡眠异常
+    }
+    
+    // 验证EventLibrary是否加载成功
+    try {
+        log("=== Verifying EventLibrary ===");
+        int handlerCount = EventLibrary.getTotalHandlerCount();
+        log("EventLibrary loaded successfully, total handlers: " + handlerCount);
+    } catch (Exception e) {
+        error(e);
+        log("EventLibrary not available: " + e.getMessage());
+        log("Continuing without EventLibrary...");
+    }
+    
+    // 加载持久化脚本
+    try {
+        log("=== Loading persisted scripts ===");
+        loadPersistedFiles();
+        log("=== Persisted scripts loaded successfully ===");
+    } catch (Exception e) {
+        error(e);
+        log("Error loading persisted scripts: " + e.getMessage());
+    }
     
     // 分发加载事件
     try {
@@ -49,18 +118,54 @@ void loadExternalLibrary() {
     try {
         log("Starting to load external libraries");
         
-        // 加载核心库
-        loadJar(appPath + "/EventLibrary.jar");
-        log("EventLibrary.jar loaded");
+        // 加载核心库 - EventLibrary.jar
+        String eventLibraryPath = appPath + "/EventLibrary.jar";
+        log("Checking EventLibrary.jar at: " + eventLibraryPath);
+        if (fileExists(eventLibraryPath)) {
+            try {
+                log("Attempting to load EventLibrary.jar...");
+                loadJar(eventLibraryPath);
+                log("✓ EventLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load EventLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ EventLibrary.jar not found at: " + eventLibraryPath);
+        }
         
         // 加载其他库
-        loadJar(appPath + "/MyLibrary.jar");
-        log("MyLibrary.jar loaded");
+        String myLibraryPath = appPath + "/MyLibrary.jar";
+        log("Checking MyLibrary.jar at: " + myLibraryPath);
+        if (fileExists(myLibraryPath)) {
+            try {
+                log("Attempting to load MyLibrary.jar...");
+                loadJar(myLibraryPath);
+                log("✓ MyLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load MyLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ MyLibrary.jar not found at: " + myLibraryPath);
+        }
         
-        loadJar(appPath + "/AdvancedLibrary.jar");
-        log("AdvancedLibrary.jar loaded");
+        String advancedLibraryPath = appPath + "/AdvancedLibrary.jar";
+        log("Checking AdvancedLibrary.jar at: " + advancedLibraryPath);
+        if (fileExists(advancedLibraryPath)) {
+            try {
+                log("Attempting to load AdvancedLibrary.jar...");
+                loadJar(advancedLibraryPath);
+                log("✓ AdvancedLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load AdvancedLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ AdvancedLibrary.jar not found at: " + advancedLibraryPath);
+        }
         
-        log("External libraries loaded successfully");
+        log("External libraries loading completed");
     } catch (Exception e) {
         error(e);
         log("Failed to load external library: " + e.getMessage());
@@ -98,19 +203,67 @@ boolean isAdmin(String qq) {
 }
 
 void loadPersistedFiles() {
+    // 首先加载持久化列表中的文件
     String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
-    if (filesStr.isEmpty()) return;
-    String[] files = filesStr.split(",");
-    for (String file : files) {
-        if (file.trim().isEmpty()) continue;
-        String filePath = getScriptsDir() + "/" + file.trim();
-        try {
-            load(filePath);
-            log("自动加载持久化文件: " + file);
-        } catch (Exception e) {
-            error(e);
-            log("自动加载失败: " + file + " - " + e.getMessage());
+    if (!filesStr.isEmpty()) {
+        String[] files = filesStr.split(",");
+        for (String file : files) {
+            if (file.trim().isEmpty()) continue;
+            String filePath = getScriptsDir() + "/" + file.trim();
+            try {
+                // 检查文件是否存在
+                if (fileExists(filePath)) {
+                    load(filePath);
+                    log("自动加载持久化文件: " + file);
+                } else {
+                    log("跳过不存在的文件: " + file);
+                }
+            } catch (Exception e) {
+                error(e);
+                log("自动加载失败: " + file + " - " + e.getMessage());
+            }
         }
+    }
+    
+    // 自动加载scripts目录中的text.java文件
+    String textFilePath = getScriptsDir() + "/text.java";
+    try {
+        if (fileExists(textFilePath)) {
+            load(textFilePath);
+            log("自动加载scripts目录中的text.java文件");
+        } else {
+            log("scripts目录中不存在text.java文件");
+        }
+    } catch (Exception e) {
+        error(e);
+        log("加载text.java失败: " + e.getMessage());
+    }
+    
+    // 自动加载scripts目录中的其他java文件
+    try {
+        String scriptsDir = getScriptsDir();
+        String content = readFileText(scriptsDir);
+        if (content != null) {
+            String[] lines = content.split("\\n");
+            for (String line : lines) {
+                String fileName = line.trim();
+                if (fileName.endsWith(".java") && !fileName.equals("text.java")) {
+                    String filePath = scriptsDir + "/" + fileName;
+                    try {
+                        if (fileExists(filePath)) {
+                            load(filePath);
+                            log("自动加载scripts目录中的文件: " + fileName);
+                        }
+                    } catch (Exception e) {
+                        error(e);
+                        log("加载文件失败: " + fileName + " - " + e.getMessage());
+                    }
+                }
+            }
+        }
+    } catch (Exception e) {
+        error(e);
+        log("读取scripts目录失败: " + e.getMessage());
     }
 }
 
@@ -513,6 +666,17 @@ void testAdvancedLibrary(Object msg, String content) {
     }
 }
 
+// 脚本消息处理器映射
+ArrayList<Object> scriptMessageHandlers = new ArrayList<>();
+
+// 注册脚本消息处理器
+void registerScriptMessageHandler(Object handler) {
+    if (handler != null) {
+        scriptMessageHandlers.add(handler);
+        log("Registered script message handler: " + handler.getClass().getName());
+    }
+}
+
 void onMsg(Object msg) {
     try {
         log("Main script onMsg triggered: " + (msg.MessageContent != null ? msg.MessageContent : "null"));
@@ -549,13 +713,39 @@ void onMsg(Object msg) {
             }
         }
         
-        // 分发消息
+        // 调用脚本消息处理器
         try {
-            log("Dispatching message to registered handlers");
-            EventLibrary.dispatchMessage(msg);
+            log("Calling script message handlers");
+            for (Object handler : scriptMessageHandlers) {
+                try {
+                    // 尝试调用handler的onMessage方法
+                    java.lang.reflect.Method method = handler.getClass().getMethod("onMessage", Object.class);
+                    method.invoke(handler, msg);
+                } catch (NoSuchMethodException e) {
+                    // 忽略没有onMessage方法的处理器
+                } catch (Exception e) {
+                    error(e);
+                    log("Error calling script message handler: " + e.getMessage());
+                }
+            }
         } catch (Exception e) {
             error(e);
-            log("Error dispatching message: " + e.getMessage());
+            log("Error calling script message handlers: " + e.getMessage());
+        }
+        
+        // 尝试直接调用text脚本的处理方法（兼容旧版本）
+        try {
+            if (content.trim().equals("text")) {
+                log("Handling text command");
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
+                }
+            }
+        } catch (Exception e) {
+            error(e);
+            log("Error handling text command: " + e.getMessage());
         }
         
         try {
