@@ -17,13 +17,13 @@
 ├── main.java          # 主脚本文件
 ├── text.java          # 示例脚本文件
 ├── EventLibrary.java  # 事件分发库源文件
-├── SimpleHandler.java # 事件处理器接口
 ├── MyLibrary.java     # 基础工具库
 ├── AdvancedLibrary.java # 高级功能库
 ├── EventLibrary.jar   # 编译后的事件分发库
 ├── MyLibrary.jar      # 编译后的基础工具库
 ├── AdvancedLibrary.jar # 编译后的高级功能库
 ├── API.md             # QStory API文档
+├── DEVELOPMENT.md     # 开发文档
 ├── desc.txt           # 脚本描述文件
 ├── info.prop          # 脚本信息文件
 └── debug.log          # 调试日志文件
@@ -125,18 +125,32 @@
 
 事件分发机制通过以下步骤实现：
 
-1. **主脚本接收消息**：main.java的onMsg方法接收所有消息
-2. **消息预处理**：主脚本处理命令和基础逻辑
-3. **事件分发**：通过EventLibrary.dispatchMessage()方法分发消息
-4. **处理器处理**：注册的处理器接收并处理感兴趣的消息
+1. **主脚本接收事件**：main.java的回调方法接收所有事件
+2. **事件预处理**：主脚本处理命令和基础逻辑
+3. **事件分发**：通过EventLibrary的分发方法将事件分发给注册的处理器
+4. **处理器处理**：注册的处理器接收并处理感兴趣的事件
 
-### 5.2 使用方法
+### 5.2 支持的事件类型
 
-#### 5.2.1 注册事件处理器
+EventLibrary现在支持以下事件类型的分发：
+
+- **消息事件**：收到消息时触发
+- **禁言事件**：成员被禁言时触发
+- **进群/退群事件**：有成员进群或退群时触发
+- **悬浮窗点击事件**：点击脚本悬浮窗时触发
+- **消息发送事件**：点击发送按钮发送消息时触发
+- **菜单创建事件**：长按消息创建菜单时触发
+- **原始消息事件**：收到未解析的原始消息时触发
+- **脚本加载事件**：脚本完成加载时触发
+- **脚本卸载事件**：取消加载脚本时触发
+
+### 5.3 使用方法
+
+#### 5.3.1 注册消息处理器
 
 ```java
 // 创建并注册消息处理器
-EventLibrary.registerHandler(new SimpleHandler() {
+EventLibrary.registerHandler(new EventLibrary.MessageHandler() {
     public void handle(Object msg) {
         // 处理消息逻辑
         if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
@@ -147,22 +161,74 @@ EventLibrary.registerHandler(new SimpleHandler() {
             }
         }
     }
+}, EventLibrary.Priority.HIGH); // 可选：设置优先级
+```
+
+#### 5.3.2 注册其他事件处理器
+
+```java
+// 注册禁言事件处理器
+EventLibrary.registerForbiddenEventHandler(new EventLibrary.ForbiddenEventHandler() {
+    public void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
+        // 处理禁言事件
+        sendMsg(GroupUin, "", "用户 " + UserUin + " 被禁言 " + time + " 秒");
+    }
+});
+
+// 注册进群/退群事件处理器
+EventLibrary.registerTroopEventHandler(new EventLibrary.TroopEventHandler() {
+    public void onTroopEvent(String GroupUin, String UserUin, int type) {
+        // 处理进群/退群事件
+        if (type == 2) {
+            sendMsg(GroupUin, "", "用户 " + UserUin + " 加入了群聊");
+        } else if (type == 1) {
+            sendMsg(GroupUin, "", "用户 " + UserUin + " 退出了群聊");
+        }
+    }
 });
 ```
 
-#### 5.2.2 处理器注册流程
+#### 5.3.3 处理器注册流程
 
-1. **创建处理器**：实现SimpleHandler接口的handle方法
-2. **注册处理器**：调用EventLibrary.registerHandler()方法注册
-3. **消息分发**：主脚本接收到消息后会自动分发
-4. **处理器执行**：所有注册的处理器都会收到消息并执行各自的逻辑
+1. **创建处理器**：实现对应事件的处理器接口
+2. **注册处理器**：调用EventLibrary的注册方法
+3. **事件分发**：主脚本接收到事件后会自动分发
+4. **处理器执行**：所有注册的处理器都会收到事件并执行各自的逻辑
 
-### 5.3 优势
+### 5.4 枚举类型
 
-- **避免冲突**：多个脚本可同时运行，不会因onMsg方法冲突而失效
-- **模块化**：每个脚本专注于自己的功能，通过事件处理器响应消息
+EventLibrary提供了以下枚举类型：
+
+#### 5.4.1 消息类型枚举
+
+```java
+// 消息类型枚举
+EventLibrary.MessageType.TEXT      // 文本消息
+EventLibrary.MessageType.CARD      // 卡片消息
+EventLibrary.MessageType.IMAGE_TEXT // 图文消息
+EventLibrary.MessageType.VOICE     // 语音消息
+EventLibrary.MessageType.FILE      // 文件消息
+EventLibrary.MessageType.REPLY     // 回复消息
+EventLibrary.MessageType.UNKNOWN   // 未知消息类型
+```
+
+#### 5.4.2 优先级枚举
+
+```java
+// 优先级枚举
+EventLibrary.Priority.LOW     // 低优先级
+EventLibrary.Priority.NORMAL  // 普通优先级
+EventLibrary.Priority.HIGH    // 高优先级
+```
+
+### 5.5 优势
+
+- **避免冲突**：多个脚本可同时运行，不会因全局回调方法冲突而失效
+- **模块化**：每个脚本专注于自己的功能，通过事件处理器响应事件
 - **错误隔离**：一个处理器的错误不会影响其他处理器
 - **灵活性**：可根据需要动态注册和移除处理器
+- **优先级支持**：支持处理器优先级，确保重要处理器先执行
+- **类型安全**：使用枚举类型提高代码可读性和类型安全性
 
 ## 6. 外部库集成
 
@@ -188,9 +254,38 @@ void loadExternalLibrary() {
 
 #### 6.2.1 EventLibrary
 
-- **registerHandler(SimpleHandler handler)**：注册消息处理器
+##### 消息处理器相关
+- **registerHandler(MessageHandler handler)**：注册消息处理器
+- **registerHandler(MessageHandler handler, int priority)**：注册消息处理器并设置优先级
+- **registerHandler(MessageHandler handler, Priority priority)**：注册消息处理器并设置优先级枚举
+- **unregisterHandler(MessageHandler handler)**：注销消息处理器
 - **dispatchMessage(Object msg)**：分发消息给所有注册的处理器
-- **getHandlerCount()**：获取注册的处理器数量
+
+##### 其他事件处理器相关
+- **registerForbiddenEventHandler(ForbiddenEventHandler handler)**：注册禁言事件处理器
+- **registerTroopEventHandler(TroopEventHandler handler)**：注册进群/退群事件处理器
+- **registerFloatingWindowClickHandler(FloatingWindowClickHandler handler)**：注册悬浮窗点击事件处理器
+- **registerMessageSendingHandler(MessageSendingHandler handler)**：注册消息发送事件处理器
+- **registerMenuCreationHandler(MenuCreationHandler handler)**：注册菜单创建事件处理器
+- **registerRawMessageHandler(RawMessageHandler handler)**：注册原始消息事件处理器
+- **registerLoadHandler(LoadHandler handler)**：注册脚本加载事件处理器
+- **registerUnloadHandler(UnloadHandler handler)**：注册脚本卸载事件处理器
+
+##### 事件分发相关
+- **dispatchForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time)**：分发禁言事件
+- **dispatchTroopEvent(String GroupUin, String UserUin, int type)**：分发进群/退群事件
+- **dispatchFloatingWindowClick(int type, String uin)**：分发悬浮窗点击事件
+- **dispatchMessageSending(String msg, String targetUin, int type)**：分发消息发送事件
+- **dispatchMenuCreation(Object msg)**：分发菜单创建事件
+- **dispatchRawMessage(Object msg)**：分发原始消息事件
+- **dispatchLoad()**：分发脚本加载事件
+- **dispatchUnload()**：分发脚本卸载事件
+
+##### 工具方法
+- **getMessageType(Object msg)**：获取消息类型
+- **getHandlerCount()**：获取消息处理器数量
+- **getTotalHandlerCount()**：获取所有处理器数量
+- **clearHandlers()**：清空所有处理器
 
 #### 6.2.2 MyLibrary
 
@@ -381,7 +476,7 @@ void registerTestHandler() {
         log("Starting to register test handler");
         
         // 创建并注册消息处理器
-        SimpleHandler handler = new SimpleHandler() {
+        EventLibrary.MessageHandler handler = new EventLibrary.MessageHandler() {
             public void handle(Object msg) {
                 try {
                     log("Test handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));
@@ -403,13 +498,15 @@ void registerTestHandler() {
             }
         };
         
-        // 注册处理器
-        EventLibrary.registerHandler(handler);
-        log("Test message handler registered successfully");
+        // 注册处理器（使用高优先级）
+        EventLibrary.registerHandler(handler, EventLibrary.Priority.HIGH);
+        log("Test message handler registered successfully with high priority");
         
         // 记录当前处理器数量
-        int count = EventLibrary.getHandlerCount();
-        log("Total handlers registered: " + count);
+        int count = EventLibrary.getMessageHandlerCount();
+        log("Total message handlers registered: " + count);
+        int totalCount = EventLibrary.getTotalHandlerCount();
+        log("Total handlers registered: " + totalCount);
         
     } catch (Exception e) {
         error(e);
@@ -417,20 +514,78 @@ void registerTestHandler() {
     }
 }
 
+// 注册其他事件处理器
+void registerOtherHandlers() {
+    try {
+        // 注册禁言事件处理器
+        EventLibrary.registerForbiddenEventHandler(new EventLibrary.ForbiddenEventHandler() {
+            public void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
+                try {
+                    log("Forbidden event: User " + UserUin + " banned for " + time + " seconds");
+                    sendMsg(GroupUin, "", "用户 " + UserUin + " 被禁言 " + time + " 秒");
+                } catch (Exception e) {
+                    error(e);
+                }
+            }
+        });
+        
+        // 注册进群/退群事件处理器
+        EventLibrary.registerTroopEventHandler(new EventLibrary.TroopEventHandler() {
+            public void onTroopEvent(String GroupUin, String UserUin, int type) {
+                try {
+                    if (type == 2) {
+                        log("User " + UserUin + " joined group " + GroupUin);
+                        sendMsg(GroupUin, "", "欢迎新成员加入群聊！");
+                    } else if (type == 1) {
+                        log("User " + UserUin + " left group " + GroupUin);
+                        sendMsg(GroupUin, "", "成员已退出群聊");
+                    }
+                } catch (Exception e) {
+                    error(e);
+                }
+            }
+        });
+        
+        log("Other event handlers registered successfully");
+        
+    } catch (Exception e) {
+        error(e);
+        log("Failed to register other handlers: " + e.getMessage());
+    }
+}
+
 // 调用注册方法
 registerTestHandler();
+registerOtherHandlers();
 
 log("text.java loaded successfully");
 ```
 
 ## 10. 总结
 
-本脚本通过模块化设计和事件分发机制，解决了QStory脚本环境的诸多限制，为开发者提供了一个灵活、强大的开发框架。通过热加载功能，开发者可以实时编写和测试代码；通过事件分发机制，多个脚本可以和谐共存，避免方法冲突；通过外部库集成，实现了复杂的面向对象特性。
+本脚本通过模块化设计和全面的事件分发机制，解决了QStory脚本环境的诸多限制，为开发者提供了一个灵活、强大的开发框架。
 
-这种设计不仅提高了开发效率，也增强了脚本的可维护性和扩展性，为QStory脚本开发开辟了新的可能性。
+### 核心优势
+
+- **热加载功能**：支持动态加载、编辑和保存Java文件，实现实时开发和测试
+- **完整的事件分发**：支持9种不同类型的事件，避免全局回调方法冲突
+- **优先级系统**：处理器支持优先级设置，确保重要处理器先执行
+- **枚举类型支持**：提供消息类型和优先级的枚举，提高代码可读性和类型安全性
+- **错误隔离**：一个处理器的错误不会影响其他处理器的运行
+- **外部库集成**：通过加载JAR文件，实现复杂的面向对象特性
+- **模块化设计**：每个脚本可以专注于自己的功能，通过事件处理器响应事件
+
+### 技术创新
+
+- **全面的事件系统**：不仅支持消息事件，还支持禁言、进群/退群、悬浮窗点击等多种事件
+- **类型安全**：使用枚举类型和接口定义，提供类型安全的API
+- **向后兼容**：保持了与原有API的兼容性，同时扩展了新功能
+- **性能优化**：使用优先级排序和错误隔离，提高事件处理效率
+
+这种设计不仅提高了开发效率，也增强了脚本的可维护性和扩展性，为QStory脚本开发开辟了新的可能性。开发者可以通过事件分发机制，创建更加模块化、可维护的脚本，同时避免了全局方法冲突的问题。
 
 ---
 
-**文档更新日期**：2026-02-21
-**作者**氢氧根
-**版本**：1.0.0
+**文档更新日期**：2026-02-23
+**作者**：氢氧根
+**版本**：2.0.0

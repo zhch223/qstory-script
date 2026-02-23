@@ -18,33 +18,31 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
 
-// 全局变量（由框架提供）
-// String myUin;
-// Context context;
-// String appPath;
-// ClassLoader loader;
-// String pluginID;
 
-// 存储等待状态的键前缀
 String STATE_PREFIX = "hotload_state_";
 String FILE_PREFIX = "hotload_file_";
-// 持久化列表的配置名和键名
 String PERSIST_CONFIG = "hotload_persist";
 String PERSIST_KEY = "files";
-// 管理员列表配置
 String ADMIN_CONFIG = "admin_list";
 String ADMIN_KEY = "admins";
 
-// 状态常量
 int STATE_NONE = 0;
 int STATE_WAIT_CREATE = 1;
 int STATE_WAIT_EDIT = 2;
 
-// ==================== 初始化与权限管理 ====================
 void onLoad() {
     ensureAdmin(myUin);
     loadExternalLibrary();
     loadPersistedFiles();
+    
+    // 分发加载事件
+    try {
+        log("Dispatching load event to registered handlers");
+        EventLibrary.dispatchLoad();
+    } catch (Exception e) {
+        error(e);
+        log("Error dispatching load event: " + e.getMessage());
+    }
 }
 
 void loadExternalLibrary() {
@@ -99,14 +97,13 @@ boolean isAdmin(String qq) {
     return getAdminSet().contains(qq);
 }
 
-// ==================== 持久化管理 ====================
 void loadPersistedFiles() {
     String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
     if (filesStr.isEmpty()) return;
     String[] files = filesStr.split(",");
     for (String file : files) {
         if (file.trim().isEmpty()) continue;
-        String filePath = appPath + "/" + file.trim();
+        String filePath = getScriptsDir() + "/" + file.trim();
         try {
             load(filePath);
             log("自动加载持久化文件: " + file);
@@ -130,7 +127,7 @@ void addToPersistList(String fileName, Object msg) {
         sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + fileName + " 已在持久化列表中。");
         return;
     }
-    String filePath = appPath + "/" + fileName;
+    String filePath = getScriptsDir() + "/" + fileName;
     if (!fileExists(filePath)) {
         sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + fileName + " 不存在，请先创建。");
         return;
@@ -190,78 +187,6 @@ void showPersistList(Object msg) {
     }
 }
 
-void showScriptList(Object msg) {
-    try {
-        String scriptsDir = appPath + "/scripts";
-        java.io.File dir = new java.io.File(scriptsDir);
-        java.io.File[] files = dir.listFiles();
-        
-        if (files == null || files.length == 0) {
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "scripts目录为空，暂无脚本。");
-            return;
-        }
-        
-        StringBuilder sb = new StringBuilder("当前scripts目录下的脚本：\n");
-        int count = 0;
-        for (java.io.File file : files) {
-            if (file.isFile() && file.getName().endsWith(".java")) {
-                sb.append("- " + file.getName() + "\n");
-                count++;
-            }
-        }
-        
-        if (count == 0) {
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "scripts目录下暂无Java脚本文件。");
-        } else {
-            sb.append("\n共 " + count + " 个脚本文件");
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, sb.toString());
-        }
-    } catch (Exception e) {
-        error(e);
-        log("Error showing script list: " + e.getMessage());
-        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "获取脚本列表失败：" + e.getMessage());
-    }
-}
-
-void stopScript(String fileName, Object msg) {
-    try {
-        // 从持久化列表中移除
-        String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
-        if (!filesStr.isEmpty()) {
-            String[] arr = filesStr.split(",");
-            ArrayList<String> list = new ArrayList<>();
-            boolean found = false;
-            for (String s : arr) {
-                if (s.trim().equals(fileName)) {
-                    found = true;
-                } else if (!s.trim().isEmpty()) {
-                    list.add(s.trim());
-                }
-            }
-            if (found) {
-                String newStr = String.join(",", list);
-                if (newStr.isEmpty()) {
-                    putString(PERSIST_CONFIG, PERSIST_KEY, "");
-                } else {
-                    putString(PERSIST_CONFIG, PERSIST_KEY, newStr);
-                }
-            }
-        }
-        
-        // 这里可以添加额外的停止逻辑，比如从EventLibrary中移除对应的处理器
-        // 由于我们的事件分发机制是基于注册的处理器，停止脚本可能需要更复杂的逻辑
-        // 目前主要是从持久化列表中移除，确保下次不会自动加载
-        
-        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "脚本 " + fileName + " 已停止。");
-        log("Stopped script: " + fileName);
-    } catch (Exception e) {
-        error(e);
-        log("Error stopping script: " + e.getMessage());
-        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "停止脚本失败：" + e.getMessage());
-    }
-}
-
-// ==================== 文件管理 ====================
 boolean fileExists(String path) {
     try {
         String content = readFileText(path);
@@ -276,7 +201,54 @@ boolean isValidFileName(String name) {
     return name.matches("^[a-zA-Z0-9_.]+\\.java$") && !name.startsWith(".") && !name.contains("..");
 }
 
-// ==================== 命令处理 ====================
+String getScriptsDir() {
+    return appPath + "/scripts";
+}
+
+void listScripts(Object msg) {
+    try {
+        String scriptsDir = getScriptsDir();
+        String content = readFileText(scriptsDir);
+        if (content == null) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "脚本目录不存在或无法读取。");
+            return;
+        }
+        
+        String[] lines = content.split("\\n");
+        ArrayList<String> scripts = new ArrayList<>();
+        
+        for (String line : lines) {
+            if (line.trim().endsWith(".java")) {
+                scripts.add(line.trim());
+            }
+        }
+        
+        if (scripts.isEmpty()) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "脚本目录为空。");
+        } else {
+            StringBuilder sb = new StringBuilder("当前脚本列表：\n");
+            for (String script : scripts) {
+                sb.append("- " + script + "\n");
+            }
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, sb.toString());
+        }
+    } catch (Exception e) {
+        error(e);
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "列出脚本失败：" + e.getMessage());
+    }
+}
+
+void stopScript(String fileName, Object msg) {
+    try {
+        removeFromPersistList(fileName, msg);
+        
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "脚本 " + fileName + " 已停止。");
+    } catch (Exception e) {
+        error(e);
+        sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "停止脚本失败：" + e.getMessage());
+    }
+}
+
 boolean handleWaitingState(Object msg, String sessionId) {
     int state = getInt(STATE_PREFIX, sessionId, STATE_NONE);
     String fileName = getString(FILE_PREFIX, sessionId, "");
@@ -291,17 +263,7 @@ boolean handleWaitingState(Object msg, String sessionId) {
         return true;
     }
 
-    String filePath;
-    if (state == STATE_WAIT_CREATE) {
-        // 新建文件时保存到scripts目录
-        filePath = appPath + "/scripts/" + fileName;
-    } else {
-        // 编辑文件时，先尝试在scripts目录查找，再尝试根目录
-        filePath = appPath + "/scripts/" + fileName;
-        if (!fileExists(filePath)) {
-            filePath = appPath + "/" + fileName;
-        }
-    }
+    String filePath = getScriptsDir() + "/" + fileName;
 
     if (state == STATE_WAIT_CREATE) {
         try {
@@ -399,12 +361,7 @@ boolean handleFileCommand(Object msg, String sessionId, String cmd, String arg) 
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
             return true;
         }
-        // 尝试在scripts目录中查找
-        String filePath = appPath + "/scripts/" + arg;
-        if (!fileExists(filePath)) {
-            // 如果scripts目录中不存在，尝试在根目录查找
-            filePath = appPath + "/" + arg;
-        }
+        String filePath = getScriptsDir() + "/" + arg;
         String contentStr = readFileText(filePath);
         if (contentStr == null) {
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件不存在或无法读取：" + arg);
@@ -423,12 +380,7 @@ boolean handleFileCommand(Object msg, String sessionId, String cmd, String arg) 
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
             return true;
         }
-        // 尝试在scripts目录中查找
-        String filePath = appPath + "/scripts/" + arg;
-        if (!fileExists(filePath)) {
-            // 如果scripts目录中不存在，尝试在根目录查找
-            filePath = appPath + "/" + arg;
-        }
+        String filePath = getScriptsDir() + "/" + arg;
         try {
             load(filePath);
             sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + arg + " 已加载。");
@@ -467,20 +419,6 @@ boolean handlePersistCommand(Object msg, String cmd, String arg) {
     } else if (cmd.equals("/列表")) {
         showPersistList(msg);
         return true;
-    } else if (cmd.equals("/脚本列表")) {
-        showScriptList(msg);
-        return true;
-    } else if (cmd.equals("/stop")) {
-        if (arg.isEmpty() || !arg.endsWith(".java")) {
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "用法：/stop 文件名.java （必须以.java结尾）");
-            return true;
-        }
-        if (!isValidFileName(arg)) {
-            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
-            return true;
-        }
-        stopScript(arg, msg);
-        return true;
     }
     return false;
 }
@@ -501,6 +439,24 @@ boolean handleCommand(Object msg, String sessionId) {
 
     if (cmd.equals("/取消")) {
         handleCancelCommand(msg, sessionId);
+        return true;
+    }
+
+    if (cmd.equals("/脚本列表")) {
+        listScripts(msg);
+        return true;
+    }
+
+    if (cmd.equals("/stop")) {
+        if (arg.isEmpty() || !arg.endsWith(".java")) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "用法：/stop 文件名.java （必须以.java结尾）");
+            return true;
+        }
+        if (!isValidFileName(arg)) {
+            sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件名包含非法字符。");
+            return true;
+        }
+        stopScript(arg, msg);
         return true;
     }
 
@@ -593,7 +549,7 @@ void onMsg(Object msg) {
             }
         }
         
-        // 分发消息给注册的处理器
+        // 分发消息
         try {
             log("Dispatching message to registered handlers");
             EventLibrary.dispatchMessage(msg);
@@ -602,7 +558,6 @@ void onMsg(Object msg) {
             log("Error dispatching message: " + e.getMessage());
         }
         
-        // 测试外部库
         try {
             String processed = MyLibrary.processMessage(content);
             int length = MyLibrary.getMessageLength(content);
@@ -636,5 +591,154 @@ void onMsg(Object msg) {
     } catch (Exception e) {
         error(e);
         log("Critical error in main onMsg: " + e.getMessage());
+    }
+}
+
+// 脚本卸载时调用
+void onUnLoad() {
+    try {
+        log("Main script onUnLoad triggered");
+        
+        // 分发卸载事件
+        try {
+            log("Dispatching unload event to registered handlers");
+            EventLibrary.dispatchUnload();
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching unload event: " + e.getMessage());
+        }
+        
+        log("Main script onUnLoad completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main onUnLoad: " + e.getMessage());
+    }
+}
+
+// 成员被禁言时调用
+void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
+    try {
+        log("Main script onForbiddenEvent triggered: Group=" + GroupUin + ", User=" + UserUin + ", Operator=" + OPUin + ", Time=" + time);
+        
+        // 分发禁言事件
+        try {
+            log("Dispatching forbidden event to registered handlers");
+            EventLibrary.dispatchForbiddenEvent(GroupUin, UserUin, OPUin, time);
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching forbidden event: " + e.getMessage());
+        }
+        
+        log("Main script onForbiddenEvent completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main onForbiddenEvent: " + e.getMessage());
+    }
+}
+
+// 进群/退群事件时调用
+void onTroopEvent(String GroupUin, String UserUin, int type) {
+    try {
+        log("Main script onTroopEvent triggered: Group=" + GroupUin + ", User=" + UserUin + ", Type=" + type);
+        
+        // 分发进群/退群事件
+        try {
+            log("Dispatching troop event to registered handlers");
+            EventLibrary.dispatchTroopEvent(GroupUin, UserUin, type);
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching troop event: " + e.getMessage());
+        }
+        
+        log("Main script onTroopEvent completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main onTroopEvent: " + e.getMessage());
+    }
+}
+
+// 点击悬浮窗时调用
+void onClickFloatingWindow(int type, String uin) {
+    try {
+        log("Main script onClickFloatingWindow triggered: Type=" + type + ", Uin=" + uin);
+        
+        // 分发悬浮窗点击事件
+        try {
+            log("Dispatching floating window click event to registered handlers");
+            EventLibrary.dispatchFloatingWindowClick(type, uin);
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching floating window click event: " + e.getMessage());
+        }
+        
+        log("Main script onClickFloatingWindow completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main onClickFloatingWindow: " + e.getMessage());
+    }
+}
+
+// 发送消息时调用
+String getMsg(String msg, String targetUin, int type) {
+    try {
+        log("Main script getMsg triggered: Message=" + msg + ", TargetUin=" + targetUin + ", Type=" + type);
+        
+        // 分发消息发送事件
+        try {
+            log("Dispatching message sending event to registered handlers");
+            String processedMsg = EventLibrary.dispatchMessageSending(msg, targetUin, type);
+            log("Message processed by handlers: " + processedMsg);
+            return processedMsg;
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching message sending event: " + e.getMessage());
+            return msg; // 出错时返回原始消息
+        }
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main getMsg: " + e.getMessage());
+        return msg; // 出错时返回原始消息
+    }
+}
+
+// 长按消息创建菜单时调用
+void onCreateMenu(Object msg) {
+    try {
+        log("Main script onCreateMenu triggered");
+        
+        // 分发菜单创建事件
+        try {
+            log("Dispatching menu creation event to registered handlers");
+            EventLibrary.dispatchMenuCreation(msg);
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching menu creation event: " + e.getMessage());
+        }
+        
+        log("Main script onCreateMenu completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main onCreateMenu: " + e.getMessage());
+    }
+}
+
+// 收到原始消息时调用
+void callbackOnRawMsg(Object msg) {
+    try {
+        log("Main script callbackOnRawMsg triggered");
+        
+        // 分发原始消息事件
+        try {
+            log("Dispatching raw message event to registered handlers");
+            EventLibrary.dispatchRawMessage(msg);
+        } catch (Exception e) {
+            error(e);
+            log("Error dispatching raw message event: " + e.getMessage());
+        }
+        
+        log("Main script callbackOnRawMsg completed successfully");
+    } catch (Exception e) {
+        error(e);
+        log("Critical error in main callbackOnRawMsg: " + e.getMessage());
     }
 }
