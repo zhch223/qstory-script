@@ -1,23 +1,25 @@
 # QStory 热加载脚本框架
 
-一个基于QStory平台的Java脚本框架，提供热加载、事件分发、模块化设计等功能，解决脚本冲突问题。
+一个基于QStory平台的Java脚本框架，提供热加载、全局方法机制、模块化设计等功能，解决脚本冲突问题。
 
 ## 功能特性
 
 - **热加载Java代码**：支持动态加载、编辑和保存Java文件
 - **持久化加载列表**：可将常用脚本加入持久化列表，自动加载
 - **动态管理员白名单**：支持添加/移除管理员权限
-- **完整的事件分发机制**：支持9种不同类型的事件，避免方法冲突
+- **全局方法机制**：通过main.java提供的全局方法，实现脚本间的协作，避免方法冲突
 - **外部库集成**：支持加载外部JAR文件，扩展脚本功能
-- **优先级系统**：处理器支持优先级设置，确保重要处理器先执行
-- **枚举类型支持**：提供消息类型和优先级的枚举，提高代码可读性
 - **错误隔离**：一个处理器的错误不会影响其他处理器的运行
+- **简单易用**：使用简单的方法调用，不需要复杂的接口实现
+- **直接集成**：不需要依赖外部库，直接使用main.java提供的方法
 
 ## 目录结构
 
 ```
 ├── main.java          # 主脚本文件
 ├── text.java          # 示例脚本文件
+├── scripts/           # 脚本目录
+│   └── text.java      # scripts目录中的示例脚本
 ├── EventLibrary.java  # 事件分发库源文件
 ├── MyLibrary.java     # 基础工具库
 ├── AdvancedLibrary.java # 高级功能库
@@ -60,54 +62,59 @@
 - `/脚本列表` - 查看所有脚本文件
 - `/stop 文件名.java` - 停止指定脚本
 
-### 3. 创建事件处理器
+### 3. 创建消息处理器
 
 ```java
-// 注册消息处理器
-EventLibrary.registerHandler(new EventLibrary.MessageHandler() {
-    public void handle(Object msg) {
-        if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
-            if (msg.IsGroup) {
-                sendMsg(msg.GroupUin, "", "hello world from handler");
-            } else {
-                sendMsg("", msg.UserUin, "hello world from handler");
+// text.java示例
+
+// 文本消息处理器类
+class TextMessageHandler {
+    public void onMessage(Object msg) {
+        try {
+            log("Text handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));    
+
+            // 检查消息内容是否为"text"
+            if (msg.MessageContent != null && msg.MessageContent.trim().equals("text")) {
+                log("Text handler processing text message");
+                // 群聊时发到群，私聊时发回给个人
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
+                }
             }
+        } catch (Exception e) {
+            error(e);
+            log("Error in text handler: " + e.getMessage());
         }
     }
-}, EventLibrary.Priority.HIGH);
+}
 
-// 注册禁言事件处理器
-EventLibrary.registerForbiddenEventHandler(new EventLibrary.ForbiddenEventHandler() {
-    public void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
-        sendMsg(GroupUin, "", "用户 " + UserUin + " 被禁言 " + time + " 秒");
-    }
-});
+// 创建处理器实例
+TextMessageHandler textHandler = new TextMessageHandler();
 
-// 注册进群/退群事件处理器
-EventLibrary.registerTroopEventHandler(new EventLibrary.TroopEventHandler() {
-    public void onTroopEvent(String GroupUin, String UserUin, int type) {
-        if (type == 2) {
-            sendMsg(GroupUin, "", "欢迎新成员加入群聊！");
-        } else if (type == 1) {
-            sendMsg(GroupUin, "", "成员已退出群聊");
-        }
-    }
-});
+// 注册到main.java的消息处理器列表
+registerScriptMessageHandler(textHandler);
+
+// 注册脚本
+registerScript("text", textHandler);
+
+log("text.java loaded successfully - using global methods");
+
+// 测试全局方法
+logGlobal("Text script initialized");
 ```
 
-## 事件类型
+## 全局方法
 
-EventLibrary支持以下事件类型：
+main.java提供以下全局方法：
 
-1. **消息事件** (`MessageHandler`) - 收到消息时触发
-2. **禁言事件** (`ForbiddenEventHandler`) - 成员被禁言时触发
-3. **进群/退群事件** (`TroopEventHandler`) - 有成员进群或退群时触发
-4. **悬浮窗点击事件** (`FloatingWindowClickHandler`) - 点击脚本悬浮窗时触发
-5. **消息发送事件** (`MessageSendingHandler`) - 点击发送按钮发送消息时触发
-6. **菜单创建事件** (`MenuCreationHandler`) - 长按消息创建菜单时触发
-7. **原始消息事件** (`RawMessageHandler`) - 收到未解析的原始消息时触发
-8. **脚本加载事件** (`LoadHandler`) - 脚本完成加载时触发
-9. **脚本卸载事件** (`UnloadHandler`) - 取消加载脚本时触发
+1. **registerScriptMessageHandler(Object handler)** - 注册消息处理器
+2. **registerScript(String scriptName, Object scriptObject)** - 注册脚本
+3. **sendGlobalMessage(String groupUin, String userUin, String content)** - 发送消息
+4. **logGlobal(String message)** - 记录日志
+5. **errorGlobal(Exception e)** - 处理错误
+6. **isGlobalAdmin(String qq)** - 检查是否为管理员
 
 ## 开发指南
 
@@ -118,13 +125,13 @@ EventLibrary支持以下事件类型：
 3. 使用 `/加载 文件名.java` 命令加载脚本
 4. 可选：使用 `/保持 文件名.java` 命令将脚本加入持久化列表
 
-### 2. 事件处理器最佳实践
+### 2. 消息处理器最佳实践
 
 - **模块化设计**：将不同功能拆分为多个小脚本
 - **错误处理**：在处理器中添加异常处理，避免影响其他处理器
 - **日志记录**：使用 `log()` 方法记录关键操作
-- **优先级设置**：根据处理器的重要性设置合适的优先级
-- **类型安全**：使用枚举类型提高代码可读性和类型安全性
+- **简单实现**：创建包含onMessage方法的处理器类
+- **正确注册**：使用registerScriptMessageHandler方法注册处理器
 
 ### 3. 外部库使用
 
@@ -147,33 +154,43 @@ boolean isEmpty = AdvancedLibrary.isEmptyMessage(messageObj);
 
 ```java
 // text.java
-void registerTestHandler() {
-    try {
-        EventLibrary.MessageHandler handler = new EventLibrary.MessageHandler() {
-            public void handle(Object msg) {
-                try {
-                    if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
-                        if (msg.IsGroup) {
-                            sendMsg(msg.GroupUin, "", "hello world from text");
-                        } else {
-                            sendMsg("", msg.UserUin, "hello world from text");
-                        }
-                    }
-                } catch (Exception e) {
-                    error(e);
+
+// 文本消息处理器类
+class TextMessageHandler {
+    public void onMessage(Object msg) {
+        try {
+            log("Text handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));    
+
+            // 检查消息内容是否为"text"
+            if (msg.MessageContent != null && msg.MessageContent.trim().equals("text")) {
+                log("Text handler processing text message");
+                // 群聊时发到群，私聊时发回给个人
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
                 }
             }
-        };
-        
-        EventLibrary.registerHandler(handler, EventLibrary.Priority.HIGH);
-        log("Test message handler registered successfully");
-    } catch (Exception e) {
-        error(e);
+        } catch (Exception e) {
+            error(e);
+            log("Error in text handler: " + e.getMessage());
+        }
     }
 }
 
-registerTestHandler();
-log("text.java loaded successfully");
+// 创建处理器实例
+TextMessageHandler textHandler = new TextMessageHandler();
+
+// 注册到main.java的消息处理器列表
+registerScriptMessageHandler(textHandler);
+
+// 注册脚本
+registerScript("text", textHandler);
+
+log("text.java loaded successfully - using global methods");
+
+// 测试全局方法
+logGlobal("Text script initialized");
 ```
 
 ## 常见问题
@@ -184,10 +201,10 @@ log("text.java loaded successfully");
 - **检查依赖**：确保所有依赖的外部库已正确加载
 - **查看日志**：查看debug.log文件，了解具体错误信息
 
-### 2. 事件处理器不生效
+### 2. 消息处理器不生效
 
-- **检查注册**：确保处理器已正确注册到EventLibrary
-- **检查逻辑**：确保处理器的逻辑正确
+- **检查注册**：确保处理器已正确注册到main.java
+- **检查逻辑**：确保处理器的onMessage方法逻辑正确
 - **查看日志**：查看debug.log文件，了解处理器注册和执行情况
 
 ### 3. 主脚本无响应
@@ -200,8 +217,9 @@ log("text.java loaded successfully");
 
 - **开发语言**：Java
 - **运行环境**：QStory脚本环境（JDK 9）
-- **核心库**：EventLibrary（事件分发）
+- **核心功能**：全局方法机制（脚本协作）
 - **工具库**：MyLibrary、AdvancedLibrary
+- **可选库**：EventLibrary（事件分发）
 
 ## 贡献
 
@@ -213,7 +231,7 @@ MIT License
 
 ## 更新日志
 
-- **2026-02-23**：完成事件分发机制的全面实现，支持所有QStory事件类型
+- **2026-02-23**：重构代码架构，使用全局方法机制替代事件分发机制，提高稳定性和易用性
 - **2026-02-21**：初始版本，实现基础的热加载和事件分发功能
 
 ---

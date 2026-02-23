@@ -7,7 +7,7 @@
 - **热加载Java代码**：支持动态加载、编辑和保存Java文件
 - **持久化加载列表**：可将常用脚本加入持久化列表，自动加载
 - **动态管理员白名单**：支持添加/移除管理员权限
-- **事件分发机制**：通过外部库实现消息事件分发，避免onMsg方法冲突
+- **全局方法机制**：通过main.java提供的全局方法，实现脚本间的协作
 - **外部库集成**：支持加载外部JAR文件，扩展脚本功能
 - **模块化设计**：采用模块化架构，便于功能扩展和维护
 
@@ -16,6 +16,8 @@
 ```
 ├── main.java          # 主脚本文件
 ├── text.java          # 示例脚本文件
+├── scripts/           # 脚本目录
+│   └── text.java      # scripts目录中的示例脚本
 ├── EventLibrary.java  # 事件分发库源文件
 ├── MyLibrary.java     # 基础工具库
 ├── AdvancedLibrary.java # 高级功能库
@@ -45,9 +47,9 @@
 - **移除管理员**：使用`/去权 QQ号`命令移除管理员
 - **查看列表**：使用`/列表`命令查看持久化加载列表
 
-### 3.3 事件分发机制
+### 3.3 全局方法机制
 
-- **避免冲突**：使用EventLibrary实现消息事件分发，避免多个脚本的onMsg方法冲突
+- **避免冲突**：使用main.java提供的全局方法，避免多个脚本的onMsg方法冲突
 - **模块化处理**：每个脚本可独立注册消息处理器，专注于自己的功能
 - **错误隔离**：一个处理器的错误不会影响其他处理器的运行
 
@@ -119,116 +121,86 @@
 - `httpGet(String url)`：发送HTTP GET请求
 - `httpPost(String url, Map<String, String> data)`：发送HTTP POST请求
 
-## 5. 事件分发机制
+## 5. 全局方法机制
 
 ### 5.1 原理
 
-事件分发机制通过以下步骤实现：
+全局方法机制通过以下步骤实现：
 
-1. **主脚本接收事件**：main.java的回调方法接收所有事件
-2. **事件预处理**：主脚本处理命令和基础逻辑
-3. **事件分发**：通过EventLibrary的分发方法将事件分发给注册的处理器
+1. **主脚本提供全局方法**：main.java提供一系列全局方法供其他脚本调用
+2. **脚本注册处理器**：其他脚本通过全局方法注册消息处理器
+3. **主脚本分发事件**：main.java的onMsg方法接收消息后，调用所有注册的处理器
 4. **处理器处理**：注册的处理器接收并处理感兴趣的事件
 
-### 5.2 支持的事件类型
+### 5.2 支持的全局方法
 
-EventLibrary现在支持以下事件类型的分发：
+main.java提供以下全局方法：
 
-- **消息事件**：收到消息时触发
-- **禁言事件**：成员被禁言时触发
-- **进群/退群事件**：有成员进群或退群时触发
-- **悬浮窗点击事件**：点击脚本悬浮窗时触发
-- **消息发送事件**：点击发送按钮发送消息时触发
-- **菜单创建事件**：长按消息创建菜单时触发
-- **原始消息事件**：收到未解析的原始消息时触发
-- **脚本加载事件**：脚本完成加载时触发
-- **脚本卸载事件**：取消加载脚本时触发
+- **registerScriptMessageHandler(Object handler)**：注册消息处理器
+- **registerScript(String scriptName, Object scriptObject)**：注册脚本
+- **sendGlobalMessage(String groupUin, String userUin, String content)**：发送消息
+- **logGlobal(String message)**：记录日志
+- **errorGlobal(Exception e)**：处理错误
+- **isGlobalAdmin(String qq)**：检查是否为管理员
 
 ### 5.3 使用方法
 
 #### 5.3.1 注册消息处理器
 
 ```java
-// 创建并注册消息处理器
-EventLibrary.registerHandler(new EventLibrary.MessageHandler() {
-    public void handle(Object msg) {
-        // 处理消息逻辑
-        if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
-            if (msg.IsGroup) {
-                sendMsg(msg.GroupUin, "", "hello world");
-            } else {
-                sendMsg("", msg.UserUin, "hello world");
+// text.java示例
+
+// 文本消息处理器类
+class TextMessageHandler {
+    public void onMessage(Object msg) {
+        try {
+            log("Text handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));    
+
+            // 检查消息内容是否为"text"
+            if (msg.MessageContent != null && msg.MessageContent.trim().equals("text")) {
+                log("Text handler processing text message");
+                // 群聊时发到群，私聊时发回给个人
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
+                }
             }
+        } catch (Exception e) {
+            error(e);
+            log("Error in text handler: " + e.getMessage());
         }
     }
-}, EventLibrary.Priority.HIGH); // 可选：设置优先级
+}
+
+// 创建处理器实例
+TextMessageHandler textHandler = new TextMessageHandler();
+
+// 注册到main.java的消息处理器列表
+registerScriptMessageHandler(textHandler);
+
+// 注册脚本
+registerScript("text", textHandler);
+
+log("text.java loaded successfully - using global methods");
 ```
 
-#### 5.3.2 注册其他事件处理器
+#### 5.3.2 处理器注册流程
 
-```java
-// 注册禁言事件处理器
-EventLibrary.registerForbiddenEventHandler(new EventLibrary.ForbiddenEventHandler() {
-    public void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
-        // 处理禁言事件
-        sendMsg(GroupUin, "", "用户 " + UserUin + " 被禁言 " + time + " 秒");
-    }
-});
+1. **创建处理器类**：创建一个包含onMessage方法的处理器类
+2. **创建处理器实例**：实例化处理器类
+3. **注册处理器**：调用registerScriptMessageHandler方法注册处理器
+4. **注册脚本**：调用registerScript方法注册脚本信息
+5. **事件分发**：main.java接收到消息后会自动调用所有注册的处理器
 
-// 注册进群/退群事件处理器
-EventLibrary.registerTroopEventHandler(new EventLibrary.TroopEventHandler() {
-    public void onTroopEvent(String GroupUin, String UserUin, int type) {
-        // 处理进群/退群事件
-        if (type == 2) {
-            sendMsg(GroupUin, "", "用户 " + UserUin + " 加入了群聊");
-        } else if (type == 1) {
-            sendMsg(GroupUin, "", "用户 " + UserUin + " 退出了群聊");
-        }
-    }
-});
-```
-
-#### 5.3.3 处理器注册流程
-
-1. **创建处理器**：实现对应事件的处理器接口
-2. **注册处理器**：调用EventLibrary的注册方法
-3. **事件分发**：主脚本接收到事件后会自动分发
-4. **处理器执行**：所有注册的处理器都会收到事件并执行各自的逻辑
-
-### 5.4 枚举类型
-
-EventLibrary提供了以下枚举类型：
-
-#### 5.4.1 消息类型枚举
-
-```java
-// 消息类型枚举
-EventLibrary.MessageType.TEXT      // 文本消息
-EventLibrary.MessageType.CARD      // 卡片消息
-EventLibrary.MessageType.IMAGE_TEXT // 图文消息
-EventLibrary.MessageType.VOICE     // 语音消息
-EventLibrary.MessageType.FILE      // 文件消息
-EventLibrary.MessageType.REPLY     // 回复消息
-EventLibrary.MessageType.UNKNOWN   // 未知消息类型
-```
-
-#### 5.4.2 优先级枚举
-
-```java
-// 优先级枚举
-EventLibrary.Priority.LOW     // 低优先级
-EventLibrary.Priority.NORMAL  // 普通优先级
-EventLibrary.Priority.HIGH    // 高优先级
-```
-
-### 5.5 优势
+### 5.4 优势
 
 - **避免冲突**：多个脚本可同时运行，不会因全局回调方法冲突而失效
-- **模块化**：每个脚本专注于自己的功能，通过事件处理器响应事件
+- **模块化**：每个脚本专注于自己的功能，通过处理器响应事件
 - **错误隔离**：一个处理器的错误不会影响其他处理器
 - **灵活性**：可根据需要动态注册和移除处理器
-- **优先级支持**：支持处理器优先级，确保重要处理器先执行
-- **类型安全**：使用枚举类型提高代码可读性和类型安全性
+- **简单易用**：使用简单的方法调用，不需要复杂的接口实现
+- **直接集成**：不需要依赖外部库，直接使用main.java提供的方法
 
 ## 6. 外部库集成
 
@@ -239,10 +211,56 @@ EventLibrary.Priority.HIGH    // 高优先级
 ```java
 void loadExternalLibrary() {
     try {
-        loadJar(appPath + "/EventLibrary.jar");
-        loadJar(appPath + "/MyLibrary.jar");
-        loadJar(appPath + "/AdvancedLibrary.jar");
-        log("External libraries loaded successfully");
+        log("Starting to load external libraries");
+        
+        // 加载核心库 - EventLibrary.jar
+        String eventLibraryPath = appPath + "/EventLibrary.jar";
+        log("Checking EventLibrary.jar at: " + eventLibraryPath);
+        if (fileExists(eventLibraryPath)) {
+            try {
+                log("Attempting to load EventLibrary.jar...");
+                loadJar(eventLibraryPath);
+                log("✓ EventLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load EventLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ EventLibrary.jar not found at: " + eventLibraryPath);
+        }
+        
+        // 加载其他库
+        String myLibraryPath = appPath + "/MyLibrary.jar";
+        log("Checking MyLibrary.jar at: " + myLibraryPath);
+        if (fileExists(myLibraryPath)) {
+            try {
+                log("Attempting to load MyLibrary.jar...");
+                loadJar(myLibraryPath);
+                log("✓ MyLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load MyLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ MyLibrary.jar not found at: " + myLibraryPath);
+        }
+        
+        String advancedLibraryPath = appPath + "/AdvancedLibrary.jar";
+        log("Checking AdvancedLibrary.jar at: " + advancedLibraryPath);
+        if (fileExists(advancedLibraryPath)) {
+            try {
+                log("Attempting to load AdvancedLibrary.jar...");
+                loadJar(advancedLibraryPath);
+                log("✓ AdvancedLibrary.jar loaded successfully");
+            } catch (Exception e) {
+                error(e);
+                log("✗ Failed to load AdvancedLibrary.jar: " + e.getMessage());
+            }
+        } else {
+            log("✗ AdvancedLibrary.jar not found at: " + advancedLibraryPath);
+        }
+        
+        log("External libraries loading completed");
     } catch (Exception e) {
         error(e);
         log("Failed to load external library: " + e.getMessage());
@@ -252,54 +270,23 @@ void loadExternalLibrary() {
 
 ### 6.2 库功能
 
-#### 6.2.1 EventLibrary
-
-##### 消息处理器相关
-- **registerHandler(MessageHandler handler)**：注册消息处理器
-- **registerHandler(MessageHandler handler, int priority)**：注册消息处理器并设置优先级
-- **registerHandler(MessageHandler handler, Priority priority)**：注册消息处理器并设置优先级枚举
-- **unregisterHandler(MessageHandler handler)**：注销消息处理器
-- **dispatchMessage(Object msg)**：分发消息给所有注册的处理器
-
-##### 其他事件处理器相关
-- **registerForbiddenEventHandler(ForbiddenEventHandler handler)**：注册禁言事件处理器
-- **registerTroopEventHandler(TroopEventHandler handler)**：注册进群/退群事件处理器
-- **registerFloatingWindowClickHandler(FloatingWindowClickHandler handler)**：注册悬浮窗点击事件处理器
-- **registerMessageSendingHandler(MessageSendingHandler handler)**：注册消息发送事件处理器
-- **registerMenuCreationHandler(MenuCreationHandler handler)**：注册菜单创建事件处理器
-- **registerRawMessageHandler(RawMessageHandler handler)**：注册原始消息事件处理器
-- **registerLoadHandler(LoadHandler handler)**：注册脚本加载事件处理器
-- **registerUnloadHandler(UnloadHandler handler)**：注册脚本卸载事件处理器
-
-##### 事件分发相关
-- **dispatchForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time)**：分发禁言事件
-- **dispatchTroopEvent(String GroupUin, String UserUin, int type)**：分发进群/退群事件
-- **dispatchFloatingWindowClick(int type, String uin)**：分发悬浮窗点击事件
-- **dispatchMessageSending(String msg, String targetUin, int type)**：分发消息发送事件
-- **dispatchMenuCreation(Object msg)**：分发菜单创建事件
-- **dispatchRawMessage(Object msg)**：分发原始消息事件
-- **dispatchLoad()**：分发脚本加载事件
-- **dispatchUnload()**：分发脚本卸载事件
-
-##### 工具方法
-- **getMessageType(Object msg)**：获取消息类型
-- **getHandlerCount()**：获取消息处理器数量
-- **getTotalHandlerCount()**：获取所有处理器数量
-- **clearHandlers()**：清空所有处理器
-
-#### 6.2.2 MyLibrary
+#### 6.2.1 MyLibrary
 
 - **processMessage(String message)**：处理消息文本
 - **getMessageLength(String message)**：获取消息长度
 - **reverseMessage(String message)**：反转消息文本
 - **isTestMessage(String message)**：判断是否为测试消息
 
-#### 6.2.3 AdvancedLibrary
+#### 6.2.2 AdvancedLibrary
 
 - **createMessage(String content, String sender)**：创建消息对象
 - **formatMessage(Object message)**：格式化消息
 - **isEmptyMessage(Object message)**：判断消息是否为空
 - **MessageService.getInstance()**：获取消息服务单例
+
+#### 6.2.3 EventLibrary（可选）
+
+虽然现在主要使用全局方法机制，但EventLibrary仍然可以作为可选的事件分发解决方案。
 
 ## 7. 使用指南
 
@@ -313,38 +300,47 @@ void loadExternalLibrary() {
 
 ### 7.2 高级使用
 
-#### 7.2.1 创建事件处理器
+#### 7.2.1 创建消息处理器
 
 ```java
 // text.java示例
-void registerTestHandler() {
-    try {
-        // 创建并注册消息处理器
-        SimpleHandler handler = new SimpleHandler() {
-            public void handle(Object msg) {
-                // 处理消息逻辑
-                if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
-                    if (msg.IsGroup) {
-                        sendMsg(msg.GroupUin, "", "hello world from text");
-                    } else {
-                        sendMsg("", msg.UserUin, "hello world from text");
-                    }
+
+// 文本消息处理器类
+class TextMessageHandler {
+    public void onMessage(Object msg) {
+        try {
+            log("Text handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));    
+
+            // 检查消息内容是否为"text"
+            if (msg.MessageContent != null && msg.MessageContent.trim().equals("text")) {
+                log("Text handler processing text message");
+                // 群聊时发到群，私聊时发回给个人
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
                 }
             }
-        };
-        
-        // 注册处理器
-        EventLibrary.registerHandler(handler);
-        log("Test message handler registered successfully");
-        
-    } catch (Exception e) {
-        error(e);
-        log("Failed to register test handler: " + e.getMessage());
+        } catch (Exception e) {
+            error(e);
+            log("Error in text handler: " + e.getMessage());
+        }
     }
 }
 
-// 调用注册方法
-registerTestHandler();
+// 创建处理器实例
+TextMessageHandler textHandler = new TextMessageHandler();
+
+// 注册到main.java的消息处理器列表
+registerScriptMessageHandler(textHandler);
+
+// 注册脚本
+registerScript("text", textHandler);
+
+log("text.java loaded successfully - using global methods");
+
+// 测试全局方法
+logGlobal("Text script initialized");
 ```
 
 #### 7.2.2 使用外部库
@@ -407,10 +403,99 @@ boolean isEmpty = AdvancedLibrary.isEmptyMessage(messageObj);
 ```java
 // main.java
 
+// 全局方法集合，供其他脚本调用
+// 注册消息处理器
+void registerMessageHandler(String name, Object handler) {
+    // 这里可以实现简单的处理器注册逻辑
+    log("Registered message handler: " + name);
+}
+
+// 发送消息的全局方法
+void sendGlobalMessage(String groupUin, String userUin, String content) {
+    sendMsg(groupUin, userUin, content);
+}
+
+// 日志记录的全局方法
+void logGlobal(String message) {
+    log(message);
+}
+
+// 错误处理的全局方法
+void errorGlobal(Exception e) {
+    error(e);
+}
+
+// 检查是否为管理员的全局方法
+boolean isGlobalAdmin(String qq) {
+    return isAdmin(qq);
+}
+
+// 脚本注册方法，供其他脚本在加载时调用
+void registerScript(String scriptName, Object scriptObject) {
+    log("Script registered: " + scriptName);
+}
+
+// 脚本消息处理器映射
+ArrayList<Object> scriptMessageHandlers = new ArrayList<>();
+
+// 注册脚本消息处理器
+void registerScriptMessageHandler(Object handler) {
+    if (handler != null) {
+        scriptMessageHandlers.add(handler);
+        log("Registered script message handler: " + handler.getClass().getName());
+    }
+}
+
 void onLoad() {
     ensureAdmin(myUin);
-    loadExternalLibrary();
-    loadPersistedFiles();
+    
+    // 优先加载外部库，确保所有JAR文件在脚本加载前准备就绪
+    try {
+        log("=== Loading external libraries ===");
+        loadExternalLibrary();
+        log("=== External libraries loaded successfully ===");
+    } catch (Exception e) {
+        error(e);
+        log("Error loading external libraries: " + e.getMessage());
+    }
+    
+    // 延迟一秒，确保JAR文件完全加载
+    try {
+        Thread.sleep(1000);
+        log("Waiting for JAR files to initialize...");
+    } catch (Exception e) {
+        // 忽略睡眠异常
+    }
+    
+    // 验证EventLibrary是否加载成功
+    try {
+        log("=== Verifying EventLibrary ===");
+        int handlerCount = EventLibrary.getTotalHandlerCount();
+        log("EventLibrary loaded successfully, total handlers: " + handlerCount);
+    } catch (Exception e) {
+        error(e);
+        log("EventLibrary not available: " + e.getMessage());
+        log("Continuing without EventLibrary...");
+    }
+    
+    // 加载持久化脚本
+    try {
+        log("=== Loading persisted scripts ===");
+        loadPersistedFiles();
+        log("=== Persisted scripts loaded successfully ===");
+    } catch (Exception e) {
+        error(e);
+        log("Error loading persisted scripts: " + e.getMessage());
+    }
+    
+    // 分发加载事件
+    try {
+        log("Dispatching load event to registered handlers");
+        EventLibrary.dispatchLoad();
+    } catch (Exception e) {
+        error(e);
+        log("Error dispatching load event: " + e.getMessage());
+    }
 }
 
 void onMsg(Object msg) {
@@ -449,13 +534,39 @@ void onMsg(Object msg) {
             }
         }
         
-        // 分发消息给注册的处理器
+        // 调用脚本消息处理器
         try {
-            log("Dispatching message to registered handlers");
-            EventLibrary.dispatchMessage(msg);
+            log("Calling script message handlers");
+            for (Object handler : scriptMessageHandlers) {
+                try {
+                    // 尝试调用handler的onMessage方法
+                    java.lang.reflect.Method method = handler.getClass().getMethod("onMessage", Object.class);
+                    method.invoke(handler, msg);
+                } catch (NoSuchMethodException e) {
+                    // 忽略没有onMessage方法的处理器
+                } catch (Exception e) {
+                    error(e);
+                    log("Error calling script message handler: " + e.getMessage());
+                }
+            }
         } catch (Exception e) {
             error(e);
-            log("Error dispatching message: " + e.getMessage());
+            log("Error calling script message handlers: " + e.getMessage());
+        }
+        
+        // 尝试直接调用text脚本的处理方法（兼容旧版本）
+        try {
+            if (content.trim().equals("text")) {
+                log("Handling text command");
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
+                }
+            }
+        } catch (Exception e) {
+            error(e);
+            log("Error handling text command: " + e.getMessage());
         }
         
         log("Main script onMsg completed successfully");
@@ -466,123 +577,72 @@ void onMsg(Object msg) {
 }
 ```
 
-### 9.2 事件处理器示例
+### 9.2 消息处理器示例
 
 ```java
 // text.java
 
-void registerTestHandler() {
-    try {
-        log("Starting to register test handler");
-        
-        // 创建并注册消息处理器
-        EventLibrary.MessageHandler handler = new EventLibrary.MessageHandler() {
-            public void handle(Object msg) {
-                try {
-                    log("Test handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));
-                    
-                    // 检查消息内容是否为"测试"
-                    if (msg.MessageContent != null && msg.MessageContent.trim().equals("测试")) {
-                        log("Test handler processing test message");
-                        // 群聊时发到群，私聊时发回给个人
-                        if (msg.IsGroup) {
-                            sendMsg(msg.GroupUin, "", "hello world from text");
-                        } else {
-                            sendMsg("", msg.UserUin, "hello world from text");
-                        }
-                    }
-                } catch (Exception e) {
-                    error(e);
-                    log("Error in test handler: " + e.getMessage());
+// 文本消息处理器类
+class TextMessageHandler {
+    public void onMessage(Object msg) {
+        try {
+            log("Text handler received message: " + (msg.MessageContent != null ? msg.MessageContent : "null"));    
+
+            // 检查消息内容是否为"text"
+            if (msg.MessageContent != null && msg.MessageContent.trim().equals("text")) {
+                log("Text handler processing text message");
+                // 群聊时发到群，私聊时发回给个人
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", "hello world from text");
+                } else {
+                    sendMsg("", msg.UserUin, "hello world from text");
                 }
             }
-        };
-        
-        // 注册处理器（使用高优先级）
-        EventLibrary.registerHandler(handler, EventLibrary.Priority.HIGH);
-        log("Test message handler registered successfully with high priority");
-        
-        // 记录当前处理器数量
-        int count = EventLibrary.getMessageHandlerCount();
-        log("Total message handlers registered: " + count);
-        int totalCount = EventLibrary.getTotalHandlerCount();
-        log("Total handlers registered: " + totalCount);
-        
-    } catch (Exception e) {
-        error(e);
-        log("Failed to register test handler: " + e.getMessage());
+        } catch (Exception e) {
+            error(e);
+            log("Error in text handler: " + e.getMessage());
+        }
     }
 }
 
-// 注册其他事件处理器
-void registerOtherHandlers() {
-    try {
-        // 注册禁言事件处理器
-        EventLibrary.registerForbiddenEventHandler(new EventLibrary.ForbiddenEventHandler() {
-            public void onForbiddenEvent(String GroupUin, String UserUin, String OPUin, long time) {
-                try {
-                    log("Forbidden event: User " + UserUin + " banned for " + time + " seconds");
-                    sendMsg(GroupUin, "", "用户 " + UserUin + " 被禁言 " + time + " 秒");
-                } catch (Exception e) {
-                    error(e);
-                }
-            }
-        });
-        
-        // 注册进群/退群事件处理器
-        EventLibrary.registerTroopEventHandler(new EventLibrary.TroopEventHandler() {
-            public void onTroopEvent(String GroupUin, String UserUin, int type) {
-                try {
-                    if (type == 2) {
-                        log("User " + UserUin + " joined group " + GroupUin);
-                        sendMsg(GroupUin, "", "欢迎新成员加入群聊！");
-                    } else if (type == 1) {
-                        log("User " + UserUin + " left group " + GroupUin);
-                        sendMsg(GroupUin, "", "成员已退出群聊");
-                    }
-                } catch (Exception e) {
-                    error(e);
-                }
-            }
-        });
-        
-        log("Other event handlers registered successfully");
-        
-    } catch (Exception e) {
-        error(e);
-        log("Failed to register other handlers: " + e.getMessage());
-    }
-}
+// 创建处理器实例
+TextMessageHandler textHandler = new TextMessageHandler();
 
-// 调用注册方法
-registerTestHandler();
-registerOtherHandlers();
+// 注册到main.java的消息处理器列表
+registerScriptMessageHandler(textHandler);
 
-log("text.java loaded successfully");
+// 注册脚本
+registerScript("text", textHandler);
+
+log("text.java loaded successfully - using global methods");
+
+// 测试全局方法
+logGlobal("Text script initialized");
 ```
 
 ## 10. 总结
 
-本脚本通过模块化设计和全面的事件分发机制，解决了QStory脚本环境的诸多限制，为开发者提供了一个灵活、强大的开发框架。
+本脚本通过模块化设计和全局方法机制，解决了QStory脚本环境的诸多限制，为开发者提供了一个灵活、强大的开发框架。
 
 ### 核心优势
 
 - **热加载功能**：支持动态加载、编辑和保存Java文件，实现实时开发和测试
-- **完整的事件分发**：支持9种不同类型的事件，避免全局回调方法冲突
-- **优先级系统**：处理器支持优先级设置，确保重要处理器先执行
-- **枚举类型支持**：提供消息类型和优先级的枚举，提高代码可读性和类型安全性
+- **全局方法机制**：通过main.java提供的全局方法，实现脚本间的协作，避免全局回调方法冲突
 - **错误隔离**：一个处理器的错误不会影响其他处理器的运行
 - **外部库集成**：通过加载JAR文件，实现复杂的面向对象特性
-- **模块化设计**：每个脚本可以专注于自己的功能，通过事件处理器响应事件
+- **模块化设计**：每个脚本可以专注于自己的功能，通过处理器响应事件
+- **简单易用**：使用简单的方法调用，不需要复杂的接口实现
+- **直接集成**：不需要依赖外部库，直接使用main.java提供的方法
 
 ### 技术创新
 
-- **全面的事件系统**：不仅支持消息事件，还支持禁言、进群/退群、悬浮窗点击等多种事件
-- **类型安全**：使用枚举类型和接口定义，提供类型安全的API
+- **全局方法系统**：main.java提供一系列全局方法，方便其他脚本调用
+- **动态处理器注册**：支持脚本动态注册消息处理器
+- **反射机制**：使用反射调用处理器的方法，提高灵活性
 - **向后兼容**：保持了与原有API的兼容性，同时扩展了新功能
-- **性能优化**：使用优先级排序和错误隔离，提高事件处理效率
+- **错误处理**：完善的错误处理机制，确保脚本稳定运行
 
-这种设计不仅提高了开发效率，也增强了脚本的可维护性和扩展性，为QStory脚本开发开辟了新的可能性。开发者可以通过事件分发机制，创建更加模块化、可维护的脚本，同时避免了全局方法冲突的问题。
+这种设计不仅提高了开发效率，也增强了脚本的可维护性和扩展性，为QStory脚本开发开辟了新的可能性。开发者可以通过全局方法机制，创建更加模块化、可维护的脚本，同时避免了全局方法冲突的问题。
 
 ---
 
