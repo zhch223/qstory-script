@@ -137,6 +137,7 @@
 main.java提供以下全局方法：
 
 - **registerScriptMessageHandler(Object handler)**：注册消息处理器
+- **registerMessageHandler(String name, Object handler)**：注册命名的消息处理器
 - **registerScript(String scriptName, Object scriptObject)**：注册脚本
 - **sendGlobalMessage(String groupUin, String userUin, String content)**：发送消息
 - **logGlobal(String message)**：记录日志
@@ -386,8 +387,8 @@ boolean isEmpty = AdvancedLibrary.isEmptyMessage(messageObj);
 
 #### 8.3.2 事件处理器不生效
 
-- **检查注册**：确保处理器已正确注册到EventLibrary
-- **检查逻辑**：确保处理器的handle方法逻辑正确
+- **检查注册**：确保处理器已正确注册到main.java
+- **检查逻辑**：确保处理器的onMessage方法逻辑正确
 - **查看日志**：查看debug.log文件，了解处理器注册和执行情况
 
 #### 8.3.3 主脚本无响应
@@ -467,17 +468,6 @@ void onLoad() {
         // 忽略睡眠异常
     }
     
-    // 验证EventLibrary是否加载成功
-    try {
-        log("=== Verifying EventLibrary ===");
-        int handlerCount = EventLibrary.getTotalHandlerCount();
-        log("EventLibrary loaded successfully, total handlers: " + handlerCount);
-    } catch (Exception e) {
-        error(e);
-        log("EventLibrary not available: " + e.getMessage());
-        log("Continuing without EventLibrary...");
-    }
-    
     // 加载持久化脚本
     try {
         log("=== Loading persisted scripts ===");
@@ -487,14 +477,43 @@ void onLoad() {
         error(e);
         log("Error loading persisted scripts: " + e.getMessage());
     }
-    
-    // 分发加载事件
+}
+
+void testAdvancedLibrary(Object msg, String content) {
     try {
-        log("Dispatching load event to registered handlers");
-        EventLibrary.dispatchLoad();
+        Object messageObj = AdvancedLibrary.createMessage(content, msg.UserUin);
+        Object dispatcher = AdvancedLibrary.createEventDispatcher();
+        Object handler = AdvancedLibrary.createDefaultHandler("TestHandler");
+        Object messageService = AdvancedLibrary.MessageService.getInstance();
+        String formattedMsg = AdvancedLibrary.formatMessage(messageObj);
+        boolean isEmpty = AdvancedLibrary.isEmptyMessage(messageObj);
+        
+        String result = "Advanced Library Test Results:\n";
+        result += "Original Content: " + content + "\n";
+        result += "Formatted Message: " + formattedMsg + "\n";
+        result += "Is Empty Message: " + isEmpty + "\n";
+        result += "\n=== Advanced Features Tested ===\n";
+        result += "✓ Inner Classes (Message, EventDispatcher)\n";
+        result += "✓ Interfaces (MessageHandler)\n";
+        result += "✓ Singleton Pattern (MessageService)\n";
+        result += "✓ Factory Methods\n";
+        result += "✓ Complex OOP Features\n";
+        
+        if (msg.IsGroup) {
+            sendMsg(msg.GroupUin, "", result);
+        } else {
+            sendMsg("", msg.UserUin, result);
+        }
+        
+        log("Advanced library test completed successfully");
     } catch (Exception e) {
         error(e);
-        log("Error dispatching load event: " + e.getMessage());
+        log("Error testing advanced library: " + e.getMessage());
+        if (msg.IsGroup) {
+            sendMsg(msg.GroupUin, "", "Advanced library test failed: " + e.getMessage());
+        } else {
+            sendMsg("", msg.UserUin, "Advanced library test failed: " + e.getMessage());
+        }
     }
 }
 
@@ -567,6 +586,35 @@ void onMsg(Object msg) {
         } catch (Exception e) {
             error(e);
             log("Error handling text command: " + e.getMessage());
+        }
+        
+        try {
+            String processed = MyLibrary.processMessage(content);
+            int length = MyLibrary.getMessageLength(content);
+            String reversed = MyLibrary.reverseMessage(content);
+            boolean isTest = MyLibrary.isTestMessage(content);
+            
+            if (content.startsWith("/library")) {
+                String result = "Library Test Results:\n";
+                result += "Original: " + content + "\n";
+                result += "Processed: " + processed + "\n";
+                result += "Length: " + length + "\n";
+                result += "Reversed: " + reversed + "\n";
+                result += "Is Test: " + isTest;
+                
+                if (msg.IsGroup) {
+                    sendMsg(msg.GroupUin, "", result);
+                } else {
+                    sendMsg("", msg.UserUin, result);
+                }
+            }
+            
+            if (content.startsWith("/advanced")) {
+                testAdvancedLibrary(msg, content);
+            }
+        } catch (Exception e) {
+            error(e);
+            log("Error using external library: " + e.getMessage());
         }
         
         log("Main script onMsg completed successfully");

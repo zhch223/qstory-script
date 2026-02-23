@@ -110,11 +110,12 @@ logGlobal("Text script initialized");
 main.java提供以下全局方法：
 
 1. **registerScriptMessageHandler(Object handler)** - 注册消息处理器
-2. **registerScript(String scriptName, Object scriptObject)** - 注册脚本
-3. **sendGlobalMessage(String groupUin, String userUin, String content)** - 发送消息
-4. **logGlobal(String message)** - 记录日志
-5. **errorGlobal(Exception e)** - 处理错误
-6. **isGlobalAdmin(String qq)** - 检查是否为管理员
+2. **registerMessageHandler(String name, Object handler)** - 注册命名的消息处理器
+3. **registerScript(String scriptName, Object scriptObject)** - 注册脚本
+4. **sendGlobalMessage(String groupUin, String userUin, String content)** - 发送消息
+5. **logGlobal(String message)** - 记录日志
+6. **errorGlobal(Exception e)** - 处理错误
+7. **isGlobalAdmin(String qq)** - 检查是否为管理员
 
 ## 开发指南
 

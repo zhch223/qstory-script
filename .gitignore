@@ -16,3 +16,7 @@ debug.log
 # 系统文件
 Thumbs.db
 .DS_Store
+
+# 平台工具
+platform-tools/
+platform-tools.zip
