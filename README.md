@@ -107,7 +107,7 @@ logGlobal("Text script initialized");
 
 ## 全局方法
 
-main.java提供以下全局方法：
+main.java提供以下全局方法，其他脚本应使用这些方法进行交互：
 
 1. **registerScriptMessageHandler(Object handler)** - 注册消息处理器
 2. **registerMessageHandler(String name, Object handler)** - 注册命名的消息处理器
@@ -117,7 +117,7 @@ main.java提供以下全局方法：
 6. **errorGlobal(Exception e)** - 处理错误
 7. **isGlobalAdmin(String qq)** - 检查是否为管理员
 
-**重要强调**：全局调用类方法需要通过上述方法自己注册，**不可直接使用API.MD中提供的全局方法**（如onMsg、onLoad等），否则会与主脚本冲突，导致脚本无法正常运行。
+**重要提醒**：其他脚本应通过上述全局方法进行交互，**不可直接使用API.MD中提供的全局方法**（如onMsg、onLoad等），否则会与主脚本产生方法冲突，导致脚本无法正常运行。
 
 ## 开发指南
 
