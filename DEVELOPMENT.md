@@ -143,6 +143,13 @@ main.java提供以下全局方法：
 - **logGlobal(String message)**：记录日志
 - **errorGlobal(Exception e)**：处理错误
 - **isGlobalAdmin(String qq)**：检查是否为管理员
+- **setGlobalData(String key, Object value)**：存储全局数据
+- **getGlobalData(String key)**：获取全局数据
+- **removeGlobalData(String key)**：删除全局数据
+- **registerMessageListener(String messageType, Object listener)**：注册消息监听器
+- **sendMessage(String messageType, Object data)**：发送消息
+- **registerScriptInstance(String scriptName, Object instance)**：注册脚本实例
+- **getScriptInstance(String scriptName)**：获取脚本实例
 
 ### 5.3 使用方法
 
@@ -202,6 +209,80 @@ log("text.java loaded successfully - using global methods");
 - **灵活性**：可根据需要动态注册和移除处理器
 - **简单易用**：使用简单的方法调用，不需要复杂的接口实现
 - **直接集成**：不需要依赖外部库，直接使用main.java提供的方法
+
+### 5.5 脚本间数据传递
+
+#### 5.5.1 全局变量机制
+
+```java
+// 存储数据
+setGlobalData("userInfo", "{\"name\": \"张三\", \"age\": 20}");
+
+// 读取数据
+Object userInfo = getGlobalData("userInfo");
+if (userInfo != null) {
+    log("User info: " + userInfo);
+}
+
+// 删除数据
+removeGlobalData("userInfo");
+```
+
+#### 5.5.2 消息传递机制
+
+```java
+// 发送消息
+sendMessage("userLogin", "{\"userId\": 123, \"name\": \"李四\"}");
+
+// 接收消息
+class MessageListener {
+    public void onMessageReceived(String messageType, Object data) {
+        if (messageType.equals("userLogin")) {
+            log("Received login message: " + data);
+        }
+    }
+}
+
+// 注册监听器
+MessageListener listener = new MessageListener();
+registerMessageListener("userLogin", listener);
+```
+
+#### 5.5.3 脚本实例管理
+
+```java
+// 注册实例
+class MyScript {
+    public void doSomething(String data) {
+        log("Doing something with: " + data);
+    }
+}
+
+MyScript myScript = new MyScript();
+registerScriptInstance("myScript", myScript);
+
+// 调用其他脚本
+Object scriptInstance = getScriptInstance("myScript");
+if (scriptInstance != null) {
+    try {
+        java.lang.reflect.Method method = scriptInstance.getClass().getMethod("doSomething", String.class);
+        method.invoke(scriptInstance, "Hello");
+    } catch (Exception e) {
+        error(e);
+    }
+}
+```
+
+#### 5.5.4 共享存储机制
+
+```java
+// 存储数据
+putString("app_data", "user_info", "{\"name\": \"王五\", \"level\": 10}");
+
+// 读取数据
+String userInfo = getString("app_data", "user_info", "{}");
+log("User info: " + userInfo);
+```
 
 ## 6. 外部库集成
 

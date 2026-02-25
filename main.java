@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
+import java.util.HashMap;
 
 
 String STATE_PREFIX = "hotload_state_";
@@ -60,6 +61,65 @@ boolean isGlobalAdmin(String qq) {
 // 脚本注册方法，供其他脚本在加载时调用
 void registerScript(String scriptName, Object scriptObject) {
     log("Script registered: " + scriptName);
+}
+
+// 全局数据存储
+HashMap<String, Object> globalData = new HashMap<>();
+
+// 全局数据操作方法
+void setGlobalData(String key, Object value) {
+    globalData.put(key, value);
+    log("Global data set: " + key + " = " + value);
+}
+
+Object getGlobalData(String key) {
+    return globalData.get(key);
+}
+
+void removeGlobalData(String key) {
+    globalData.remove(key);
+    log("Global data removed: " + key);
+}
+
+// 消息监听器映射
+HashMap<String, ArrayList<Object>> messageListeners = new HashMap<>();
+
+// 注册消息监听器
+void registerMessageListener(String messageType, Object listener) {
+    if (!messageListeners.containsKey(messageType)) {
+        messageListeners.put(messageType, new ArrayList<>());
+    }
+    messageListeners.get(messageType).add(listener);
+    log("Registered listener for message type: " + messageType);
+}
+
+// 发送消息
+void sendMessage(String messageType, Object data) {
+    if (messageListeners.containsKey(messageType)) {
+        for (Object listener : messageListeners.get(messageType)) {
+            try {
+                java.lang.reflect.Method method = listener.getClass().getMethod("onMessageReceived", String.class, Object.class);
+                method.invoke(listener, messageType, data);
+            } catch (Exception e) {
+                error(e);
+                log("Error calling message listener: " + e.getMessage());
+            }
+        }
+    }
+}
+
+// 脚本实例映射
+HashMap<String, Object> scriptInstances = new HashMap<>();
+
+// 注册脚本实例
+void registerScriptInstance(String scriptName, Object instance) {
+    scriptInstances.put(scriptName, instance);
+    log("Registered script instance: " + scriptName);
+}
+
+// 获取脚本实例
+Object getScriptInstance(String scriptName) {
+    return scriptInstances.get(scriptName);
 }
 
 void onLoad() {

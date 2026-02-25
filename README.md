@@ -124,6 +124,13 @@ main.java提供以下全局方法，其他脚本应使用这些方法进行交�
 5. **logGlobal(String message)** - 记录日志
 6. **errorGlobal(Exception e)** - 处理错误
 7. **isGlobalAdmin(String qq)** - 检查是否为管理员
+8. **setGlobalData(String key, Object value)** - 存储全局数据
+9. **getGlobalData(String key)** - 获取全局数据
+10. **removeGlobalData(String key)** - 删除全局数据
+11. **registerMessageListener(String messageType, Object listener)** - 注册消息监听器
+12. **sendMessage(String messageType, Object data)** - 发送消息
+13. **registerScriptInstance(String scriptName, Object instance)** - 注册脚本实例
+14. **getScriptInstance(String scriptName)** - 获取脚本实例
 
 **重要提醒**：其他脚本应通过上述全局方法进行交互，**不可直接使用API.MD中提供的全局方法**（如onMsg、onLoad等），否则会与主脚本产生方法冲突，导致脚本无法正常运行。
 
