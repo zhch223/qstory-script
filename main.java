@@ -83,18 +83,7 @@ void onLoad() {
         // 忽略睡眠异常
     }
     
-    // 验证EventLibrary是否加载成功
-    try {
-        log("=== Verifying EventLibrary ===");
-        int handlerCount = EventLibrary.getTotalHandlerCount();
-        log("EventLibrary loaded successfully, total handlers: " + handlerCount);
-    } catch (Exception e) {
-        error(e);
-        log("EventLibrary not available: " + e.getMessage());
-        log("Continuing without EventLibrary...");
-    }
-    
-    // 加载持久化脚本
+    // 加载持久化脚本 - 放在EventLibrary验证之前，确保脚本优先加载
     try {
         log("=== Loading persisted scripts ===");
         loadPersistedFiles();
@@ -102,6 +91,21 @@ void onLoad() {
     } catch (Exception e) {
         error(e);
         log("Error loading persisted scripts: " + e.getMessage());
+    }
+    
+    // 验证EventLibrary是否加载成功
+    try {
+        log("=== Verifying EventLibrary ===");
+        int handlerCount = EventLibrary.getTotalHandlerCount();
+        log("EventLibrary loaded successfully, total handlers: " + handlerCount);
+    } catch (Error e) {
+        error(e);
+        log("EventLibrary not available (Error): " + e.getMessage());
+        log("Continuing without EventLibrary...");
+    } catch (Exception e) {
+        error(e);
+        log("EventLibrary not available (Exception): " + e.getMessage());
+        log("Continuing without EventLibrary...");
     }
     
     // 分发加载事件
@@ -203,60 +207,108 @@ boolean isAdmin(String qq) {
 }
 
 void loadPersistedFiles() {
-    // 首先加载持久化列表中的文件
-    String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
-    if (!filesStr.isEmpty()) {
-        String[] files = filesStr.split(",");
-        for (String file : files) {
-            if (file.trim().isEmpty()) continue;
-            String filePath = getScriptsDir() + "/" + file.trim();
-            try {
-                // 检查文件是否存在
-                if (fileExists(filePath)) {
-                    load(filePath);
-                    log("自动加载持久化文件: " + file);
-                } else {
-                    log("跳过不存在的文件: " + file);
-                }
-            } catch (Exception e) {
-                error(e);
-                log("自动加载失败: " + file + " - " + e.getMessage());
-            }
-        }
-    }
+    log("开始加载持久化脚本");
     
-    // 自动加载scripts目录中的text.java文件
-    String textFilePath = getScriptsDir() + "/text.java";
+    // 首先确保scripts目录存在
+    String scriptsDir = getScriptsDir();
+    log("Scripts目录路径: " + scriptsDir);
+    
     try {
-        if (fileExists(textFilePath)) {
-            load(textFilePath);
-            log("自动加载scripts目录中的text.java文件");
-        } else {
-            log("scripts目录中不存在text.java文件");
+        // 尝试读取scripts目录，检查是否存在
+        log("检查scripts目录是否存在");
+        String content = readFileText(scriptsDir);
+        log("读取scripts目录结果: " + (content != null ? "成功" : "失败"));
+        if (content == null) {
+            log("scripts目录不存在，创建scripts目录");
+            // 这里我们无法直接创建目录，但可以通过创建一个临时文件来间接创建目录
+            String tempFile = scriptsDir + "/temp.txt";
+            log("尝试创建临时文件: " + tempFile);
+            writeTextToFile(tempFile, "");
+            log("已创建scripts目录");
         }
     } catch (Exception e) {
         error(e);
-        log("加载text.java失败: " + e.getMessage());
+        log("检查scripts目录失败: " + e.getMessage());
     }
     
-    // 自动加载scripts目录中的其他java文件
+    // 从脚本目录加载列表文件
+    String loadListPath = scriptsDir + "/load_list.txt";
+    log("加载列表文件路径: " + loadListPath);
+    
     try {
-        String scriptsDir = getScriptsDir();
+        log("检查加载列表文件是否存在");
+        boolean exists = fileExists(loadListPath);
+        log("加载列表文件存在: " + exists);
+        
+        if (exists) {
+            String loadListContent = readFileText(loadListPath);
+            log("加载列表文件内容: " + (loadListContent != null ? loadListContent : "null"));
+            if (loadListContent != null && !loadListContent.isEmpty()) {
+                String[] files = loadListContent.split("\\n");
+                log("加载列表文件中的文件数量: " + files.length);
+                for (String file : files) {
+                    String fileName = file.trim();
+                    if (fileName.isEmpty()) continue;
+                    String filePath = scriptsDir + "/" + fileName;
+                    try {
+                        // 检查文件是否存在
+                        if (fileExists(filePath)) {
+                            log("加载文件: " + fileName);
+                            load(filePath);
+                            log("从加载列表加载文件: " + fileName);
+                        } else {
+                            log("跳过不存在的文件: " + fileName);
+                        }
+                    } catch (Exception e) {
+                        error(e);
+                        log("加载文件失败: " + fileName + " - " + e.getMessage());
+                    }
+                }
+            }
+        } else {
+            log("加载列表文件不存在，创建默认加载列表");
+            // 创建默认加载列表
+            log("尝试创建默认加载列表文件: " + loadListPath);
+            writeTextToFile(loadListPath, "text.java\nyiyan.java");
+            log("已创建默认加载列表文件");
+        }
+    } catch (Exception e) {
+        error(e);
+        log("读取加载列表失败: " + e.getMessage());
+    }
+    
+    log("持久化脚本加载完成");
+    
+    // 自动加载scripts目录中的其他java文件（不在加载列表中的文件）
+    try {
         String content = readFileText(scriptsDir);
         if (content != null) {
             String[] lines = content.split("\\n");
             for (String line : lines) {
                 String fileName = line.trim();
-                if (fileName.endsWith(".java") && !fileName.equals("text.java")) {
-                    String filePath = scriptsDir + "/" + fileName;
+                if (fileName.endsWith(".java")) {
+                    // 检查是否在加载列表中
+                    boolean inLoadList = false;
                     try {
-                        if (fileExists(filePath)) {
-                            load(filePath);
-                            log("自动加载scripts目录中的文件: " + fileName);
+                        String loadListContent = readFileText(loadListPath);
+                        if (loadListContent != null) {
+                            inLoadList = loadListContent.contains(fileName);
                         }
                     } catch (Exception e) {
-                        error(e);
-                        log("加载文件失败: " + fileName + " - " + e.getMessage());
+                        // 忽略读取加载列表的错误
+                    }
+                    
+                    if (!inLoadList) {
+                        String filePath = scriptsDir + "/" + fileName;
+                        try {
+                            if (fileExists(filePath)) {
+                                load(filePath);
+                                log("自动加载scripts目录中的文件: " + fileName);
+                            }
+                        } catch (Exception e) {
+                            error(e);
+                            log("加载文件失败: " + fileName + " - " + e.getMessage());
+                        }
                     }
                 }
             }
@@ -268,6 +320,7 @@ void loadPersistedFiles() {
 }
 
 void addToPersistList(String fileName, Object msg) {
+    // 更新内存中的持久化列表
     String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
     ArrayList<String> list = new ArrayList<>();
     if (!filesStr.isEmpty()) {
@@ -288,6 +341,27 @@ void addToPersistList(String fileName, Object msg) {
     list.add(fileName);
     String newStr = String.join(",", list);
     putString(PERSIST_CONFIG, PERSIST_KEY, newStr);
+    
+    // 更新脚本目录中的加载列表文件
+    try {
+        String loadListPath = getScriptsDir() + "/load_list.txt";
+        String loadListContent = "";
+        if (fileExists(loadListPath)) {
+            loadListContent = readFileText(loadListPath);
+        }
+        if (!loadListContent.contains(fileName)) {
+            if (!loadListContent.isEmpty()) {
+                loadListContent += "\n";
+            }
+            loadListContent += fileName;
+            writeTextToFile(loadListPath, loadListContent);
+            log("已将 " + fileName + " 添加到加载列表文件");
+        }
+    } catch (Exception e) {
+        error(e);
+        log("更新加载列表文件失败: " + e.getMessage());
+    }
+    
     try {
         load(filePath);
         sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + fileName + " 已加入持久化列表并已加载。");
@@ -298,6 +372,7 @@ void addToPersistList(String fileName, Object msg) {
 }
 
 void removeFromPersistList(String fileName, Object msg) {
+    // 更新内存中的持久化列表
     String filesStr = getString(PERSIST_CONFIG, PERSIST_KEY, "");
     if (filesStr.isEmpty()) {
         sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "持久化列表为空。");
@@ -323,6 +398,33 @@ void removeFromPersistList(String fileName, Object msg) {
     } else {
         putString(PERSIST_CONFIG, PERSIST_KEY, newStr);
     }
+    
+    // 更新脚本目录中的加载列表文件
+    try {
+        String loadListPath = getScriptsDir() + "/load_list.txt";
+        if (fileExists(loadListPath)) {
+            String loadListContent = readFileText(loadListPath);
+            if (loadListContent != null) {
+                // 移除包含fileName的行
+                String[] lines = loadListContent.split("\\n");
+                StringBuilder newLoadListContent = new StringBuilder();
+                for (String line : lines) {
+                    if (!line.trim().equals(fileName)) {
+                        if (newLoadListContent.length() > 0) {
+                            newLoadListContent.append("\n");
+                        }
+                        newLoadListContent.append(line);
+                    }
+                }
+                writeTextToFile(loadListPath, newLoadListContent.toString());
+                log("已将 " + fileName + " 从加载列表文件中移除");
+            }
+        }
+    } catch (Exception e) {
+        error(e);
+        log("更新加载列表文件失败: " + e.getMessage());
+    }
+    
     sendMsg(msg.IsGroup ? msg.GroupUin : "", msg.IsGroup ? "" : msg.UserUin, "文件 " + fileName + " 已从持久化列表中移除。");
 }
 
