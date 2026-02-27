@@ -19,141 +19,177 @@
 ### 流程原理图
 
 ```mermaid
-flowchart TD
-    subgraph 初始化阶段
-        A[脚本启动] --> B[确保管理员权限]
-        B --> C[加载外部库]
-        C --> D[检查EventLibrary.jar]
-        D -->|存在| E[加载EventLibrary.jar]
-        D -->|不存在| F[记录EventLibrary缺失]
-        E --> G[检查MyLibrary.jar]
-        F --> G
-        G -->|存在| H[加载MyLibrary.jar]
-        G -->|不存在| I[记录MyLibrary缺失]
-        H --> J[检查AdvancedLibrary.jar]
-        I --> J
-        J -->|存在| K[加载AdvancedLibrary.jar]
-        J -->|不存在| L[记录AdvancedLibrary缺失]
-        K --> M[加载持久化脚本]
-        L --> M
-        M --> N[读取load_list.txt]
-        N --> O[遍历脚本列表]
-        O --> P1[加载text.java]
-        O --> P2[加载yiyan.java]
-        O --> P3[加载fangzhan.java]
-        O --> P4[加载json_format.java]
-        P1 --> Q[验证EventLibrary]
-        P2 --> Q
-        P3 --> Q
-        P4 --> Q
-        Q -->|验证成功| R[分发加载事件]
-        Q -->|验证失败| S[继续执行无EventLibrary]
-        R --> T[初始化完成]
-        S --> T
-    end
-
-    subgraph 消息处理阶段
-        U[接收消息] --> V[检查等待状态]
-        V -->|有等待状态| W[处理等待操作]
-        V -->|无等待状态| X[检查管理员权限]
-        X -->|非管理员| Y[忽略命令]
-        X -->|管理员| Z[解析命令]
-        Z --> AA[处理权限命令]
-        Z --> AB[处理文件命令]
-        Z --> AC[处理持久化命令]
-        Z --> AD[处理其他命令]
-        AD --> AE[调用脚本消息处理器]
-        AE --> AF[调用外部库]
-        AF --> AG[检查MyLibrary]
-        AG -->|可用| AH[调用MyLibrary方法]
-        AG -->|不可用| AI[跳过MyLibrary]
-        AH --> AJ[检查AdvancedLibrary]
-        AI --> AJ
-        AJ -->|可用| AK[调用AdvancedLibrary方法]
-        AJ -->|不可用| AL[跳过AdvancedLibrary]
-        AK --> AM[处理完成]
-        AL --> AM
-    end
-
-    subgraph 脚本管理
-        AN[添加到持久化列表] --> AO[更新内存列表]
-        AO --> AP[更新load_list.txt]
-        AP --> AQ[加载脚本]
-        AR[从持久化列表移除] --> AS[更新内存列表]
-        AS --> AT[更新load_list.txt]
-    end
-
-    subgraph 事件处理
-        AU[成员禁言事件] --> AV[分发禁言事件]
-        AW[进群退群事件] --> AX[分发进群退群事件]
-        AY[点击悬浮窗事件] --> AZ[分发悬浮窗点击事件]
-        BA[发送消息事件] --> BB[分发消息发送事件]
-        BC[创建菜单事件] --> BD[分发菜单创建事件]
-        BE[收到原始消息事件] --> BF[分发原始消息事件]
-        AV --> BG[EventLibrary处理]
-        AX --> BG
-        AZ --> BG
-        BB --> BG
-        BD --> BG
-        BF --> BG
-        BG --> BH[事件处理完成]
-    end
-
-    subgraph 全局功能
-        BI[全局数据存储] --> BJ[设置全局数据]
-        BJ --> BK[获取全局数据]
-        BK --> BL[移除全局数据]
-        BM[消息监听器] --> BN[注册消息监听器]
-        BN --> BO[发送消息]
-        BP[脚本实例管理] --> BQ[注册脚本实例]
-        BQ --> BR[获取脚本实例]
-    end
-
-    subgraph 外部库运行时
-        BS[MyLibrary] --> BT[processMessage]
-        BT --> BU[getMessageLength]
-        BU --> BV[reverseMessage]
-        BV --> BW[isTestMessage]
-        BX[AdvancedLibrary] --> BY[createMessage]
-        BY --> BZ[createEventDispatcher]
-        BZ --> CA[createDefaultHandler]
-        CA --> CB[MessageService.getInstance]
-        CB --> CC[formatMessage]
-        CC --> CD[isEmptyMessage]
-        CE[EventLibrary] --> CF[getTotalHandlerCount]
-        CF --> CG[dispatchLoad]
-        CG --> CH[dispatchUnload]
-        CH --> CI[dispatchForbiddenEvent]
-        CI --> CJ[dispatchTroopEvent]
-        CJ --> CK[dispatchFloatingWindowClick]
-        CK --> CL[dispatchMessageSending]
-        CL --> CM[dispatchMenuCreation]
-        CM --> CN[dispatchRawMessage]
-    end
-
-    subgraph 其他脚本启动流程
-        P1 --> CP[text.java启动]
-        CP --> CQ[注册消息处理器]
-        CQ --> CR[脚本初始化完成]
-        
-        P2 --> CS[yiyan.java启动]
-        CS --> CT[注册消息处理器]
-        CT --> CU[初始化API调用]
-        CU --> CR
-        
-        P3 --> CV[fangzhan.java启动]
-        CV --> CW[注册消息处理器]
-        CW --> CX[初始化API调用]
-        CX --> CY[注册脚本]
-        CY --> CR
-        
-        P4 --> CZ[json_format.java启动]
-        CZ --> DA[注册消息处理器]
-        DA --> DB[初始化JSON格式化]
-        DB --> CR
-        
-        CR --> DC[脚本启动完成]
-    end
+flowchart TD 
+     %% 初始化阶段 
+     subgraph 初始化阶段 
+         A[脚本启动] --> B[确保管理员权限] 
+         B --> C[加载外部库] 
+         C --> D[检查EventLibrary.jar] 
+         D -->|存在| E[加载EventLibrary.jar] 
+         D -->|不存在| F[记录EventLibrary缺失] 
+         E --> G[检查MyLibrary.jar] 
+         F --> G 
+         G -->|存在| H[加载MyLibrary.jar] 
+         G -->|不存在| I[记录MyLibrary缺失] 
+         H --> J[检查AdvancedLibrary.jar] 
+         I --> J 
+         J -->|存在| K[加载AdvancedLibrary.jar] 
+         J -->|不存在| L[记录AdvancedLibrary缺失] 
+         K --> M[加载持久化脚本] 
+         L --> M 
+         M --> N[读取load_list.txt] 
+         N --> O[遍历脚本列表] 
+         O --> P1[加载text.java] 
+         O --> P2[加载yiyan.java] 
+         O --> P3[加载fangzhan.java] 
+         O --> P4[加载json_format.java] 
+         P1 --> Q[验证EventLibrary] 
+         P2 --> Q 
+         P3 --> Q 
+         P4 --> Q 
+         Q -->|验证成功| R[分发加载事件] 
+         Q -->|验证失败| S[继续执行无EventLibrary] 
+         R --> T[初始化完成] 
+         S --> T 
+     end 
+ 
+     %% 消息处理阶段 
+     subgraph 消息处理阶段 
+         U[接收消息] --> V[检查等待状态] 
+         V -->|有等待状态| W[处理等待操作] 
+         V -->|无等待状态| X[检查管理员权限] 
+         X -->|非管理员| Y[忽略命令] 
+         X -->|管理员| Z[解析命令] 
+         Z --> AA[处理权限命令] 
+         Z --> AB[处理文件命令] 
+         Z --> AC[处理持久化命令] 
+         Z --> AD[处理其他命令] 
+         W --> AM[处理完成] 
+         Y --> AM 
+         AA --> AM 
+         AB --> AM 
+         AC --> AM 
+         AD --> AE[调用脚本消息处理器] 
+         AE --> AF[调用外部库] 
+         AF --> AG[检查MyLibrary] 
+         AG -->|可用| AH[调用MyLibrary方法] 
+         AG -->|不可用| AI[跳过MyLibrary] 
+         AH --> AJ[检查AdvancedLibrary] 
+         AI --> AJ 
+         AJ -->|可用| AK[调用AdvancedLibrary方法] 
+         AJ -->|不可用| AL[跳过AdvancedLibrary] 
+         AK --> AM[处理完成] 
+         AL --> AM 
+     end 
+ 
+     %% 脚本管理 
+     subgraph 脚本管理 
+         AN[添加到持久化列表] --> AO[更新内存列表] 
+         AO --> AP[更新load_list.txt] 
+         AP --> AQ[加载脚本] 
+         AR[从持久化列表移除] --> AS[更新内存列表] 
+         AS --> AT[更新load_list.txt] 
+     end 
+ 
+     %% 事件处理 
+     subgraph 事件处理 
+         AU[成员禁言事件] --> AV[分发禁言事件] 
+         AW[进群退群事件] --> AX[分发进群退群事件] 
+         AY[点击悬浮窗事件] --> AZ[分发悬浮窗点击事件] 
+         BA[发送消息事件] --> BB[分发消息发送事件] 
+         BC[创建菜单事件] --> BD[分发菜单创建事件] 
+         BE[收到原始消息事件] --> BF[分发原始消息事件] 
+         AV --> BG[EventLibrary处理] 
+         AX --> BG 
+         AZ --> BG 
+         BB --> BG 
+         BD --> BG 
+         BF --> BG 
+         BG --> BH[事件处理完成] 
+     end 
+ 
+     %% 全局功能 
+     subgraph 全局功能 
+         BI[全局数据存储] --> BJ[设置全局数据] 
+         BJ --> BK[获取全局数据] 
+         BK --> BL[移除全局数据] 
+         BM[消息监听器] --> BN[注册消息监听器] 
+         BN --> BO[发送消息] 
+         BP[脚本实例管理] --> BQ[注册脚本实例] 
+         BQ --> BR[获取脚本实例] 
+     end 
+ 
+     %% 外部库运行时 
+     subgraph 外部库运行时 
+         BS[MyLibrary] --> BT[processMessage] 
+         BT --> BU[getMessageLength] 
+         BU --> BV[reverseMessage] 
+         BV --> BW[isTestMessage] 
+         BX[AdvancedLibrary] --> BY[createMessage] 
+         BY --> BZ[createEventDispatcher] 
+         BZ --> CA[createDefaultHandler] 
+         CA --> CB[MessageService.getInstance] 
+         CB --> CC[formatMessage] 
+         CC --> CD[isEmptyMessage] 
+         CE[EventLibrary] --> CF[getTotalHandlerCount] 
+         CF --> CG[dispatchLoad] 
+         CG --> CH[dispatchUnload] 
+         CH --> CI[dispatchForbiddenEvent] 
+         CI --> CJ[dispatchTroopEvent] 
+         CJ --> CK[dispatchFloatingWindowClick] 
+         CK --> CL[dispatchMessageSending] 
+         CL --> CM[dispatchMenuCreation] 
+         CM --> CN[dispatchRawMessage] 
+     end 
+ 
+     %% 其他脚本启动流程 
+     subgraph 其他脚本启动流程 
+         P1 --> CP[text.java启动] 
+         CP --> CQ[注册消息处理器] 
+         CQ --> CR[脚本初始化完成] 
+         
+         P2 --> CS[yiyan.java启动] 
+         CS --> CT[注册消息处理器] 
+         CT --> CU[初始化API调用] 
+         CU --> CR 
+         
+         P3 --> CV[fangzhan.java启动] 
+         CV --> CW[注册消息处理器] 
+         CW --> CX[初始化API调用] 
+         CX --> CY[注册脚本] 
+         CY --> CR 
+         
+         P4 --> CZ[json_format.java启动] 
+         CZ --> DA[注册消息处理器] 
+         DA --> DB[初始化JSON格式化] 
+         DB --> CR 
+         
+         CR --> DC[脚本启动完成] 
+     end 
+ 
+     %% 模块间关联线（核心逻辑闭环） 
+     T --> U 
+     AQ --> M 
+     AT --> N 
+     DC --> T 
+     BH --> U 
+     BO --> U 
+     BR --> AE 
+     BL --> AE 
+     CE --> BG 
+     BS --> AH 
+     BX --> AK 
+ 
+     %% 样式美化 
+     style A fill:#f9f,stroke:#333,stroke-width:2px 
+     style U fill:#f9f,stroke:#333,stroke-width:2px 
+     style AN fill:#f9f,stroke:#333,stroke-width:2px 
+     style AU fill:#f9f,stroke:#333,stroke-width:2px 
+     style BI fill:#f9f,stroke:#333,stroke-width:2px 
+     style BS fill:#f9f,stroke:#333,stroke-width:2px 
+     style CP fill:#f9f,stroke:#333,stroke-width:2px 
+     classDef subgraphStyle fill:#f0f8ff,stroke:#4169e1,stroke-width:1px 
+     class 初始化阶段,消息处理阶段,脚本管理,事件处理,全局功能,外部库运行时,其他脚本启动流程 subgraphStyle
 ```
 
 ### 脚本加载流程
