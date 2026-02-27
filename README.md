@@ -14,6 +14,216 @@
 - **简单易用**：使用简单的方法调用，不需要复杂的接口实现
 - **直接集成**：不需要依赖外部库，直接使用main.java提供的方法
 
+## 系统架构
+
+### 流程原理图
+
+```mermaid
+flowchart TD
+    subgraph 初始化阶段
+        A[脚本启动] --> B[确保管理员权限]
+        B --> C[加载外部库]
+        C --> D[检查EventLibrary.jar]
+        D -->|存在| E[加载EventLibrary.jar]
+        D -->|不存在| F[记录EventLibrary缺失]
+        E --> G[检查MyLibrary.jar]
+        F --> G
+        G -->|存在| H[加载MyLibrary.jar]
+        G -->|不存在| I[记录MyLibrary缺失]
+        H --> J[检查AdvancedLibrary.jar]
+        I --> J
+        J -->|存在| K[加载AdvancedLibrary.jar]
+        J -->|不存在| L[记录AdvancedLibrary缺失]
+        K --> M[加载持久化脚本]
+        L --> M
+        M --> N[读取load_list.txt]
+        N --> O[遍历脚本列表]
+        O --> P1[加载text.java]
+        O --> P2[加载yiyan.java]
+        O --> P3[加载fangzhan.java]
+        O --> P4[加载json_format.java]
+        P1 --> Q[验证EventLibrary]
+        P2 --> Q
+        P3 --> Q
+        P4 --> Q
+        Q -->|验证成功| R[分发加载事件]
+        Q -->|验证失败| S[继续执行无EventLibrary]
+        R --> T[初始化完成]
+        S --> T
+    end
+
+    subgraph 消息处理阶段
+        U[接收消息] --> V[检查等待状态]
+        V -->|有等待状态| W[处理等待操作]
+        V -->|无等待状态| X[检查管理员权限]
+        X -->|非管理员| Y[忽略命令]
+        X -->|管理员| Z[解析命令]
+        Z --> AA[处理权限命令]
+        Z --> AB[处理文件命令]
+        Z --> AC[处理持久化命令]
+        Z --> AD[处理其他命令]
+        AD --> AE[调用脚本消息处理器]
+        AE --> AF[调用外部库]
+        AF --> AG[检查MyLibrary]
+        AG -->|可用| AH[调用MyLibrary方法]
+        AG -->|不可用| AI[跳过MyLibrary]
+        AH --> AJ[检查AdvancedLibrary]
+        AI --> AJ
+        AJ -->|可用| AK[调用AdvancedLibrary方法]
+        AJ -->|不可用| AL[跳过AdvancedLibrary]
+        AK --> AM[处理完成]
+        AL --> AM
+    end
+
+    subgraph 脚本管理
+        AN[添加到持久化列表] --> AO[更新内存列表]
+        AO --> AP[更新load_list.txt]
+        AP --> AQ[加载脚本]
+        AR[从持久化列表移除] --> AS[更新内存列表]
+        AS --> AT[更新load_list.txt]
+    end
+
+    subgraph 事件处理
+        AU[成员禁言事件] --> AV[分发禁言事件]
+        AW[进群退群事件] --> AX[分发进群退群事件]
+        AY[点击悬浮窗事件] --> AZ[分发悬浮窗点击事件]
+        BA[发送消息事件] --> BB[分发消息发送事件]
+        BC[创建菜单事件] --> BD[分发菜单创建事件]
+        BE[收到原始消息事件] --> BF[分发原始消息事件]
+        AV --> BG[EventLibrary处理]
+        AX --> BG
+        AZ --> BG
+        BB --> BG
+        BD --> BG
+        BF --> BG
+        BG --> BH[事件处理完成]
+    end
+
+    subgraph 全局功能
+        BI[全局数据存储] --> BJ[设置全局数据]
+        BJ --> BK[获取全局数据]
+        BK --> BL[移除全局数据]
+        BM[消息监听器] --> BN[注册消息监听器]
+        BN --> BO[发送消息]
+        BP[脚本实例管理] --> BQ[注册脚本实例]
+        BQ --> BR[获取脚本实例]
+    end
+
+    subgraph 外部库运行时
+        BS[MyLibrary] --> BT[processMessage]
+        BT --> BU[getMessageLength]
+        BU --> BV[reverseMessage]
+        BV --> BW[isTestMessage]
+        BX[AdvancedLibrary] --> BY[createMessage]
+        BY --> BZ[createEventDispatcher]
+        BZ --> CA[createDefaultHandler]
+        CA --> CB[MessageService.getInstance]
+        CB --> CC[formatMessage]
+        CC --> CD[isEmptyMessage]
+        CE[EventLibrary] --> CF[getTotalHandlerCount]
+        CF --> CG[dispatchLoad]
+        CG --> CH[dispatchUnload]
+        CH --> CI[dispatchForbiddenEvent]
+        CI --> CJ[dispatchTroopEvent]
+        CJ --> CK[dispatchFloatingWindowClick]
+        CK --> CL[dispatchMessageSending]
+        CL --> CM[dispatchMenuCreation]
+        CM --> CN[dispatchRawMessage]
+    end
+
+    subgraph 其他脚本启动流程
+        P1 --> CP[text.java启动]
+        CP --> CQ[注册消息处理器]
+        CQ --> CR[脚本初始化完成]
+        
+        P2 --> CS[yiyan.java启动]
+        CS --> CT[注册消息处理器]
+        CT --> CU[初始化API调用]
+        CU --> CR
+        
+        P3 --> CV[fangzhan.java启动]
+        CV --> CW[注册消息处理器]
+        CW --> CX[初始化API调用]
+        CX --> CY[注册脚本]
+        CY --> CR
+        
+        P4 --> CZ[json_format.java启动]
+        CZ --> DA[注册消息处理器]
+        DA --> DB[初始化JSON格式化]
+        DB --> CR
+        
+        CR --> DC[脚本启动完成]
+    end
+```
+
+### 脚本加载流程
+
+1. **初始化阶段**：
+   - 脚本启动时首先确保当前用户为管理员
+   - 按顺序加载外部库（EventLibrary、MyLibrary、AdvancedLibrary）
+   - 读取`load_list.txt`文件，获取需要持久化加载的脚本列表
+   - 按顺序加载列表中的脚本：text.java、yiyan.java、fangzhan.java、json_format.java
+   - 验证EventLibrary是否加载成功
+   - 分发加载事件（如果EventLibrary可用）
+
+2. **脚本启动流程**：
+   - **text.java**：启动 → 注册消息处理器 → 初始化完成
+   - **yiyan.java**：启动 → 注册消息处理器 → 初始化API调用 → 初始化完成
+   - **fangzhan.java**：启动 → 注册消息处理器 → 初始化API调用 → 注册脚本 → 初始化完成
+   - **json_format.java**：启动 → 注册消息处理器 → 初始化JSON格式化 → 初始化完成
+
+3. **运行时流程**：
+   - 接收消息后检查等待状态
+   - 检查管理员权限
+   - 解析并处理命令
+   - 调用注册的脚本消息处理器
+   - 根据需要调用外部库功能
+
+4. **脚本管理**：
+   - 使用`/保持`命令将脚本添加到持久化列表
+   - 使用`/取消保持`命令从持久化列表移除脚本
+   - 持久化列表会同步到`load_list.txt`文件
+
+## 脚本加载说明
+
+### 1. 持久化脚本列表
+
+- **文件位置**：`scripts/load_list.txt`
+- **格式**：每行一个脚本文件名（如 `text.java`）
+- **自动加载**：主脚本启动时会自动加载列表中的所有脚本
+- **手动管理**：使用以下命令管理持久化列表：
+  - `/保持 文件名.java` - 将脚本加入持久化列表并加载
+  - `/取消保持 文件名.java` - 从持久化列表移除
+  - `/列表` - 查看当前持久化列表
+
+### 2. 脚本启动顺序
+
+1. **外部库加载**：EventLibrary → MyLibrary → AdvancedLibrary
+2. **持久化脚本加载**：按`load_list.txt`文件中的顺序加载
+3. **自动加载**：加载scripts目录中其他未在列表中的Java文件
+
+### 3. 脚本初始化流程
+
+每个脚本在加载时会执行以下操作：
+1. 创建消息处理器实例
+2. 注册到main.java的消息处理器列表
+3. 执行必要的初始化操作（如API调用初始化、功能初始化等）
+4. 注册脚本实例（可选）
+5. 输出初始化完成日志
+
+### 4. 脚本协作机制
+
+脚本之间通过main.java提供的全局方法进行协作：
+- **消息传递**：通过消息监听器机制传递消息
+- **数据共享**：通过全局数据存储共享数据
+- **实例访问**：通过脚本实例管理访问其他脚本实例
+
+### 5. 错误处理
+
+- **脚本加载错误**：单个脚本加载失败不会影响其他脚本的加载
+- **运行时错误**：单个脚本的运行时错误不会影响其他脚本的执行
+- **外部库错误**：外部库缺失或加载失败时，系统会降级运行，仅影响依赖该库的功能
+
 ## 目录结构
 
 ```
